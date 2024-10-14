@@ -1,5 +1,0 @@
-syntax = "proto3";
-
-package note_v1;
-
-option go_package = "github.com/beachrockhotel/auth/grpc/pkg/note_v1;note_v1";
