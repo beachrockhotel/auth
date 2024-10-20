@@ -25,9 +25,9 @@ func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 	log.Printf("Auth id: %d", req.GetId())
 
 	return &desc.GetResponse{
-		Note: &desc.Note{
+		Auth: &desc.Auth{
 			Id: req.GetId(),
-			Info: &desc.NoteInfo{
+			Info: &desc.AuthInfo{
 				Title:    gofakeit.BeerName(),
 				Content:  gofakeit.IPv4Address(),
 				Author:   gofakeit.Name(),
@@ -47,7 +47,7 @@ func main() {
 
 	s := grpc.NewServer()
 	reflection.Register(s)
-	desc.RegisterNoteV1Server(s, &server{})
+	desc.RegisterAuthV1Server(s, &server{})
 
 	log.Printf("server listening at %v", lis.Addr())
 
