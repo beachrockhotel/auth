@@ -27,34 +27,34 @@ message UserInfo {
   Role role = 3;
 }
 
-message CreateUserRequest {
+message CreateRequest {
   UserInfo info = 1;
   string password = 3;
   string password_confirm = 4;
 }
 
-message CreateUserResponse {
+message CreateResponse {
   int64 id = 1;
 }
 
-message GetUserRequest {
+message GetRequest {
   int64 id = 1;
 }
 
-message GetUserResponse {
+message GetResponse {
   int64 id = 1;
   UserInfo info = 2;
   google.protobuf.Timestamp created_at = 3;
   google.protobuf.Timestamp updated_at = 4;
 }
 
-message UpdateUserRequest {
+message UpdateRequest {
   int64 id = 1;
   google.protobuf.StringValue name = 2;
   google.protobuf.StringValue email = 3;
 }
 
 
-message DeleteUserRequest {
+message DeleteRequest {
   int64 id = 1;
 }
