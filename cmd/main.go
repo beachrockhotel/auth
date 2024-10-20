@@ -11,7 +11,7 @@ import (
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	desc "github.com/beachrockhotel/auth/grpc/pkg/auth_v1"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 )
 
 const grpcPort = 50051
