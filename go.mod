@@ -1,4 +1,4 @@
-module github.com/beachrockhotel/microservices
+module github.com/beachrockhotel/auth
 
 go 1.22
 
