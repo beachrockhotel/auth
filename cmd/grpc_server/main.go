@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"google.golang.org/protobuf/types/known/emptypb"
 	"log"
 	"net"
 
@@ -33,6 +34,26 @@ func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 		CreatedAt: timestamppb.New(gofakeit.Date()),
 		UpdatedAt: timestamppb.New(gofakeit.Date()),
 	}, nil
+}
+
+func (s *server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	log.Printf("Create user %v", req.GetInfo().GetName())
+
+	return &desc.CreateResponse{
+		Id: gofakeit.Int64(),
+	}, nil
+}
+
+func (s *server) Update(ctx context.Context, req *desc.UpdateRequest) (*emptypb.Empty, error) {
+	log.Printf("Updating user ID: %d, Name: %v, Email: %v", req.GetId(), req.GetName(), req.GetEmail())
+
+	return &emptypb.Empty{}, nil
+}
+
+func (s *server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.Empty, error) {
+	log.Printf("Deleting user ID: %d", req.GetId())
+
+	return &emptypb.Empty{}, nil
 }
 
 func main() {
