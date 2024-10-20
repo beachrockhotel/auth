@@ -28,7 +28,7 @@ func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 		Info: &desc.UserInfo{
 			Name:  gofakeit.Name(),
 			Email: gofakeit.Email(),
-			Role:  desc.Role_USER, // Для примера, можно использовать генерацию роли случайным образом
+			Role:  desc.Role_USER,
 		},
 		CreatedAt: timestamppb.New(gofakeit.Date()),
 		UpdatedAt: timestamppb.New(gofakeit.Date()),
