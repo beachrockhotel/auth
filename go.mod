@@ -3,13 +3,13 @@ module github.com/beachrockhotel/auth
 go 1.22
 
 require (
+	github.com/brianvoe/gofakeit v3.18.0+incompatible
+	github.com/fatih/color v1.15.0
 	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.35.1
 )
 
 require (
-	github.com/brianvoe/gofakeit v3.18.0+incompatible // indirect
-	github.com/fatih/color v1.15.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.17 // indirect
