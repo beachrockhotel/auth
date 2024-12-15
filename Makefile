@@ -8,8 +8,14 @@ get-deps:
 	@go get -u google.golang.org/protobuf/cmd/protoc-gen-go
 	@go get -u google.golang.org/grpc/cmd/protoc-gen-go-grpc
 
+build:
+	GOOS=linux GOARCH=amd64 go build -o service_linux cmd/grpc_server/main.go
+
 generate:
 	make generate-auth-api
+
+copy-to-server:
+	scp service_linux root@109.71.15.36:
 
 generate-auth-api:
 	@mkdir -p pkg/auth_v1
