@@ -1,4 +1,4 @@
-module github.com/beachrockhotel/auth
+module github.com/beachrockhotel/auth/grpc
 
 go 1.22
 
