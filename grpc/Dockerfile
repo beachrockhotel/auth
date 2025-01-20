@@ -1,7 +1,7 @@
 FROM golang:1.20.3-alpine AS builder
 
-COPY .. /github.com/beachrockhotel/auth/source/
-WORKDIR /github.com/beachrockhotel/auth/source/
+COPY .. /github.com/beachrockhotel/auth/grpc/source/
+WORKDIR /github.com/beachrockhotel/auth/grpc/source/
 
 RUN go mod download
 RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
@@ -9,6 +9,6 @@ RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
 FROM alpine:latest
 
 WORKDIR /root/
-COPY --from=builder /github.com/beachrockhotel/auth/source/bin/crud_server .
+COPY --from=builder /github.com/beachrockhotel/auth/grpc/source/bin/crud_server .
 
 CMD ["./crud_server"]

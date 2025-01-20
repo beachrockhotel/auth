@@ -19,7 +19,7 @@ copy-to-server:
 
 docker-build-and-push:
 	docker buildx build --no-cache --platform linux/amd64 -t cr.selcloud.ru/beachrockhotel/test-server:v0.0.1 .
-	docker login -u token -p CRgAAAAA4K83Tm9QTg-rGLukLjESun0YL1NQVIsR cr.selcloud.ru/beachrockhotel
+	docker login -u token -p CRgAAAAAkL-JL7tX1UmJizGV3dsIj9cYqY7Y0WEq cr.selcloud.ru/beachrockhotel
 	docker push cr.selcloud.ru/beachrockhotel/test-server:v0.0.1
 
 generate-auth-api:
