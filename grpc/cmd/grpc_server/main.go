@@ -27,7 +27,7 @@ func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 	return &desc.GetResponse{
 		Id: req.GetId(),
 		Info: &desc.UserInfo{
-			Name:  "NEW NAME",
+			Name:  gofakeit.Name(),
 			Email: gofakeit.Email(),
 			Role:  desc.Role_USER,
 		},
