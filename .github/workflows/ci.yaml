@@ -7,7 +7,7 @@ on:
         branches: [ main, master ]
 
 env:
-  REGISTERY: "cr.selcloud.ru/beachrockhotel"
+  REGISTRY: "cr.selcloud.ru/beachrockhotel"
   IMAGE_NAME: "crud-server"
   CONTAINER_NAME: "crud-server-container"
 
@@ -29,7 +29,7 @@ jobs:
         run: |
           TAG_NAME=$(echo $GITHUB_SHA | head -c7)
           docker buildx create --use
-          docker buildx build --no-cache --push --tag $REGISTRY/$IMAGE_NAME:$TAG_NAME -f auth/Dockerfile auth 
+          docker buildx build --no-cache --push --tag $REGISTRY/$IMAGE_NAME:$TAG_NAME -f auth/grpc/Dockerfile auth/grpc/
 
   deploy-image:
     runs-on: ubuntu-latest
