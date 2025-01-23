@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
-	"fmt"
+	"flag"
+	"github.com/beachrockhotel/auth/grpc/internal/config"
+	"github.com/beachrockhotel/auth/grpc/internal/config/env"
+	"github.com/jackc/pgx/v4/pgxpool"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"log"
 	"net"
@@ -15,10 +18,15 @@ import (
 	desc "github.com/beachrockhotel/auth/grpc/pkg/auth_v1"
 )
 
-const grpcPort = 50051
+var configPath string
+
+func init() {
+	flag.StringVar(&configPath, "config-path", ".env", "path to config file")
+}
 
 type server struct {
 	desc.UnimplementedAuthV1Server
+	pool *pgxpool.Pool
 }
 
 func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
@@ -27,7 +35,7 @@ func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 	return &desc.GetResponse{
 		Id: req.GetId(),
 		Info: &desc.UserInfo{
-			Name:  "MY NAME",
+			Name:  gofakeit.Name(),
 			Email: gofakeit.Email(),
 			Role:  desc.Role_USER,
 		},
@@ -57,10 +65,35 @@ func (s *server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.
 }
 
 func main() {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	flag.Parse()
+	ctx := context.Background()
+
+	err := config.Load(configPath)
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	grpcConfig, err := env.NewGRPCConfig()
+	if err != nil {
+		log.Fatalf("Failed to get grpc config: %v", err)
+	}
+
+	pgConfig, err := env.NewPGConfig()
+	if err != nil {
+		log.Fatalf("Failed to get pg config: %v", err)
+	}
+
+	lis, err := net.Listen("tcp", grpcConfig.Address())
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	pool, err := pgxpool.Connect(ctx, pgConfig.DSN())
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+
+	defer pool.Close()
 
 	s := grpc.NewServer()
 	reflection.Register(s)
