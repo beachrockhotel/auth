@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"github.com/biggiecheesebiggie/auth/grpc/internal/repository/auth/model"
+	"github.com/beachrockhotel/internal/repository/auth/model"
 )
 
 type AuthRepository interface {

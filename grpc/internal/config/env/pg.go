@@ -2,7 +2,7 @@ package env
 
 import (
 	"errors"
-	"github.com/biggiecheesebiggie/auth/grpc/internal/config"
+	"github.com/beachrockhotel/internal/config"
 	"os"
 )
 

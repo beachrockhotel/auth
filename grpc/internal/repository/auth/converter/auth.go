@@ -3,8 +3,8 @@ package converter
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/biggiecheesebiggie/internal/model"
-	desc "github.com/biggiecheesebiggie/pkg/auth_v1"
+	"github.com/beachrockhotel/internal/model"
+	desc "github.com/beachrockhotel/pkg/auth_v1"
 )
 
 func ToAuthFromService(auth *model.Auth) *desc.Auth {

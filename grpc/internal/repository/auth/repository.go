@@ -5,11 +5,11 @@ import (
 
 	sq "github.com/Masterminds/squirrel"
 
-	"github.com/biggiecheesebiggie/internal/client/db"
-	"github.com/biggiecheesebiggie/internal/model"
-	"github.com/biggiecheesebiggie/internal/repository"
-	"github.com/biggiecheesebiggie/internal/repository/auth/converter"
-	modelRepo "github.com/biggiecheesebiggie/internal/repository/auth/model"
+	"github.com/beachrockhotel/internal/client/db"
+	"github.com/beachrockhotel/internal/model"
+	"github.com/beachrockhotel/internal/repository"
+	"github.com/beachrockhotel/internal/repository/auth/converter"
+	modelRepo "github.com/beachrockhotel/internal/repository/auth/model"
 )
 
 const (
