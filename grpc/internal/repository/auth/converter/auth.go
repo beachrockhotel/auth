@@ -3,8 +3,8 @@ package converter
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/olezhek28/microservices_course/week_3/internal/model"
-	desc "github.com/olezhek28/microservices_course/week_3/pkg/auth_v1"
+	"github.com/biggiecheesebiggie/internal/model"
+	desc "github.com/biggiecheesebiggie/pkg/auth_v1"
 )
 
 func ToAuthFromService(auth *model.Auth) *desc.Auth {
@@ -21,16 +21,18 @@ func ToAuthFromService(auth *model.Auth) *desc.Auth {
 	}
 }
 
-func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
-	return &desc.AuthInfo{
-		Title:   info.Title,
-		Content: info.Content,
+func ToAuthInfoFromService(info model.AuthInfo) *desc.UserInfo {
+	return &desc.UserInfo{
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  desc.Role(desc.Role_value[info.Role]), // преобразование строки в enum
 	}
 }
 
-func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
+func ToAuthInfoFromDesc(info *desc.UserInfo) *model.AuthInfo {
 	return &model.AuthInfo{
-		Title:   info.Title,
-		Content: info.Content,
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  info.Role.String(), // enum -> string
 	}
 }

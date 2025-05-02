@@ -13,6 +13,7 @@ type Auth struct {
 }
 
 type AuthInfo struct {
-	Title   string
-	Content string
+	Name  string
+	Email string
+	Role  string
 }
