@@ -1,19 +1,17 @@
 package model
 
 import (
-	"database/sql"
 	"time"
 )
 
-type Auth struct {
-	ID        int64
-	Info      AuthInfo
-	CreatedAt time.Time
-	UpdatedAt sql.NullTime
-}
+type Role int32
 
-type AuthInfo struct {
-	Name  string
-	Email string
-	Role  string
+type User struct {
+	ID        int64
+	Name      string
+	Email     string
+	Password  string
+	Role      Role
+	CreatedAt time.Time
+	UpdatedAt *time.Time
 }

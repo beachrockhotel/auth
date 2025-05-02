@@ -2,88 +2,150 @@ package auth
 
 import (
 	"context"
-
-	sq "github.com/Masterminds/squirrel"
-
-	"github.com/beachrockhotel/internal/client/db"
-	"github.com/beachrockhotel/internal/model"
-	"github.com/beachrockhotel/internal/repository"
-	"github.com/beachrockhotel/internal/repository/auth/converter"
-	modelRepo "github.com/beachrockhotel/internal/repository/auth/model"
-)
-
-const (
-	tableName = "auth"
-
-	idColumn        = "id"
-	nameColumn      = "name"
-	emailColumn     = "email"
-	createdAtColumn = "created_at"
-	updatedAtColumn = "updated_at"
+	"github.com/Masterminds/squirrel"
+	"github.com/beachrockhotel/auth/grpc/internal/repository/auth/model"
+	desc "github.com/beachrockhotel/auth/grpc/pkg/auth_v1"
+	"github.com/brianvoe/gofakeit"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"log"
+	"time"
 )
 
 type repo struct {
-	db db.Client
+	db *pgxpool.Pool
 }
 
-func NewRepository(db db.Client) repository.AuthRepository {
+func NewRepository(db *pgxpool.Pool) *repo {
 	return &repo{db: db}
 }
 
-func (r *repo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
-	builder := sq.Insert(tableName).
-		PlaceholderFormat(sq.Dollar).
-		Columns(nameColumn, emailColumn).
-		Values(info.Name, info.Email).
-		Suffix("RETURNING id")
-
-	query, args, err := builder.ToSql()
+func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error) {
+	conn, err := r.db.Acquire(ctx)
 	if err != nil {
-		return 0, err
+		log.Println("failed to acquire connection from pool: ", err)
+		return nil, status.Errorf(codes.Internal, "database connection error")
 	}
+	defer conn.Release()
 
-	q := db.Query{
-		Name:     "auth_repository.Create",
-		QueryRaw: query,
-	}
-
-	var id int64
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&id)
+	query, args, err := squirrel.
+		Select("id", "user_name", "user_email", "role", "user_created", "user_update").
+		From("users_auth").
+		Where(squirrel.Eq{"id": req.Id}).
+		ToSql()
 	if err != nil {
-		return 0, err
+		log.Println("failed to build query: ", err)
+		return nil, status.Errorf(codes.Internal, "failed to build query")
 	}
 
-	return id, nil
+	row := conn.QueryRow(ctx, query, args...)
+
+	var user model.User
+	err = row.Scan(&user.ID, &user.Name, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return status.Errorf(codes.NotFound, "user with ID %d not found", req.Id), nil
+		}
+		log.Println("failed to scan row: ", err)
+		return nil, status.Errorf(codes.Internal, "failed to retrieve user data")
+	}
+
+	return model.User{
+		ID:        user.ID,
+		Name:      user.Name,
+		Email:     user.Email,
+		Password:  user.Password,
+		Role:      user.Role,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
 }
 
-func (r *repo) Get(ctx context.Context, id int64) (*model.Auth, error) {
-	builder := sq.Select(idColumn, nameColumn, emailColumn, createdAtColumn, updatedAtColumn).
-		PlaceholderFormat(sq.Dollar).
-		From(tableName).
-		Where(sq.Eq{idColumn: id}).
-		Limit(1)
-
-	query, args, err := builder.ToSql()
+func (r *repo) Update(ctx context.Context, req *desc.UpdateRequest) error {
+	conn, err := r.db.Acquire(ctx)
 	if err != nil {
-		return nil, err
+		log.Println("failed to acquire connection from pool: ", err)
+		return nil
 	}
+	defer conn.Release()
 
-	q := db.Query{
-		Name:     "auth_repository.Get",
-		QueryRaw: query,
-	}
-
-	var auth modelRepo.Auth
-	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(
-		&auth.ID,
-		&auth.Name,
-		&auth.Email,
-		&auth.CreatedAt,
-		&auth.UpdatedAt,
-	)
+	query, args, err := squirrel.
+		Update("users_auth").
+		Set("user_name", req.Name.GetValue()).
+		Set("user_email", req.Email.GetValue()).
+		Set("user_update", time.Now()).
+		Where(squirrel.Eq{"id": req.Id}).
+		ToSql()
 	if err != nil {
-		return nil, err
+		log.Println("failed to build query: ", err)
+		return nil
 	}
 
-	return converter.ToAuthFromRepo(&auth), nil
+	_, err = conn.Exec(ctx, query, args...)
+	if err != nil {
+		log.Println("failed to update user: ", err)
+		return nil
+	}
+
+	return nil
+}
+
+func (r *repo) Delete(ctx context.Context, req *desc.DeleteRequest) error {
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		log.Println("failed to acquire connection from pool: ", err)
+		return nil
+	}
+	defer conn.Release()
+
+	query, args, err := squirrel.
+		Delete("users_auth").
+		Where(squirrel.Eq{"id": req.Id}).
+		ToSql()
+	if err != nil {
+		log.Println("failed to build query: ", err)
+		return nil
+	}
+
+	_, err = conn.Exec(ctx, query, args...)
+	if err != nil {
+		log.Println("failed to delete user: ", err)
+		return nil
+	}
+
+	return nil
+}
+
+func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	conn, err := r.db.Acquire(ctx)
+	if err != nil {
+		log.Println("failed to acquire connection from pool: ", err)
+		return nil, status.Errorf(codes.Internal, "database connection error")
+	}
+	defer conn.Release()
+
+	id := gofakeit.Number(0, 1000)
+	name := gofakeit.Name()
+	password := gofakeit.Password(true, false, false, false, false, 32)
+	role := gofakeit.Number(1, 2)
+
+	query, args, err := squirrel.
+		Insert("users_auth").
+		Columns("id", "user_name", "password", "role").
+		Values(id, name, password, role).
+		ToSql()
+	if err != nil {
+		log.Println("failed to build query: ", err)
+		return nil, status.Errorf(codes.Internal, "failed to build query")
+	}
+
+	_, err = conn.Exec(ctx, query, args...)
+	if err != nil {
+		log.Println("failed to insert user: ", err)
+		return nil, status.Errorf(codes.Internal, "failed to create user")
+	}
+
+	return &desc.CreateResponse{}, nil
 }
