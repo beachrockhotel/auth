@@ -1,6 +1,6 @@
 FROM golang:1.20.3-alpine AS builder
 
-COPY .. /github.com/beachrockhotel/auth/source/
+COPY . /github.com/beachrockhotel/auth/source/
 WORKDIR /github.com/beachrockhotel/auth/source/
 
 RUN go mod download

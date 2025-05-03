@@ -26,7 +26,7 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
+		return err, status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
@@ -37,7 +37,7 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 		ToSql()
 	if err != nil {
 		log.Println("failed to build query: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to build query")
+		return err, status.Errorf(codes.Internal, "failed to build query")
 	}
 
 	row := conn.QueryRow(ctx, query, args...)
@@ -46,10 +46,10 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 	err = row.Scan(&user.ID, &user.Name, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return status.Errorf(codes.NotFound, "user with ID %d not found", req.Id), nil
+			return model.User{}, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id), nil
 		}
 		log.Println("failed to scan row: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to retrieve user data")
+		return err, status.Errorf(codes.Internal, "failed to retrieve user data")
 	}
 
 	return model.User{
@@ -67,7 +67,7 @@ func (r *repo) Update(ctx context.Context, req *desc.UpdateRequest) error {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return nil
+		return err
 	}
 	defer conn.Release()
 
@@ -80,23 +80,23 @@ func (r *repo) Update(ctx context.Context, req *desc.UpdateRequest) error {
 		ToSql()
 	if err != nil {
 		log.Println("failed to build query: ", err)
-		return nil
+		return err
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to update user: ", err)
-		return nil
+		return err
 	}
 
-	return nil
+	return err
 }
 
 func (r *repo) Delete(ctx context.Context, req *desc.DeleteRequest) error {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return nil
+		return err
 	}
 	defer conn.Release()
 
@@ -106,23 +106,23 @@ func (r *repo) Delete(ctx context.Context, req *desc.DeleteRequest) error {
 		ToSql()
 	if err != nil {
 		log.Println("failed to build query: ", err)
-		return nil
+		return err
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to delete user: ", err)
-		return nil
+		return err
 	}
 
-	return nil
+	return err
 }
 
 func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
+		return err, status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
@@ -138,14 +138,14 @@ func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Creat
 		ToSql()
 	if err != nil {
 		log.Println("failed to build query: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to build query")
+		return err, status.Errorf(codes.Internal, "failed to build query")
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to insert user: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to create user")
+		return err, status.Errorf(codes.Internal, "failed to create user")
 	}
 
-	return &desc.CreateResponse{}, nil
+	return return &desc.CreateResponse{}, nildesc.CreateResponse{Id: int64(id)}, nil
 }

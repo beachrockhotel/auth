@@ -3,7 +3,7 @@ package converter
 import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/repository/auth/model"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 )
 
