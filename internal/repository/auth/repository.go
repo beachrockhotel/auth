@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"log"
+	"time"
+
 	"github.com/Masterminds/squirrel"
 	"github.com/beachrockhotel/auth/internal/repository/auth/model"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
@@ -10,8 +13,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	"log"
-	"time"
 )
 
 type repo struct {
@@ -26,7 +27,7 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return err, status.Errorf(codes.Internal, "database connection error")
+		return model.User{}, status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
@@ -37,7 +38,7 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 		ToSql()
 	if err != nil {
 		log.Println("failed to build query: ", err)
-		return err, status.Errorf(codes.Internal, "failed to build query")
+		return model.User{}, status.Errorf(codes.Internal, "failed to build query")
 	}
 
 	row := conn.QueryRow(ctx, query, args...)
@@ -46,28 +47,20 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 	err = row.Scan(&user.ID, &user.Name, &user.Email, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return model.User{}, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id), nil
+			return model.User{}, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
 		}
 		log.Println("failed to scan row: ", err)
-		return err, status.Errorf(codes.Internal, "failed to retrieve user data")
+		return model.User{}, status.Errorf(codes.Internal, "failed to retrieve user data")
 	}
 
-	return model.User{
-		ID:        user.ID,
-		Name:      user.Name,
-		Email:     user.Email,
-		Password:  user.Password,
-		Role:      user.Role,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
-	}, nil
+	return user, nil
 }
 
 func (r *repo) Update(ctx context.Context, req *desc.UpdateRequest) error {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return err
+		return status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
@@ -79,24 +72,24 @@ func (r *repo) Update(ctx context.Context, req *desc.UpdateRequest) error {
 		Where(squirrel.Eq{"id": req.Id}).
 		ToSql()
 	if err != nil {
-		log.Println("failed to build query: ", err)
-		return err
+		log.Println("failed to build update query: ", err)
+		return status.Errorf(codes.Internal, "failed to build update query")
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to update user: ", err)
-		return err
+		return status.Errorf(codes.Internal, "failed to update user")
 	}
 
-	return err
+	return nil
 }
 
 func (r *repo) Delete(ctx context.Context, req *desc.DeleteRequest) error {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return err
+		return status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
@@ -105,28 +98,28 @@ func (r *repo) Delete(ctx context.Context, req *desc.DeleteRequest) error {
 		Where(squirrel.Eq{"id": req.Id}).
 		ToSql()
 	if err != nil {
-		log.Println("failed to build query: ", err)
-		return err
+		log.Println("failed to build delete query: ", err)
+		return status.Errorf(codes.Internal, "failed to build delete query")
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to delete user: ", err)
-		return err
+		return status.Errorf(codes.Internal, "failed to delete user")
 	}
 
-	return err
+	return nil
 }
 
 func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
 	conn, err := r.db.Acquire(ctx)
 	if err != nil {
 		log.Println("failed to acquire connection from pool: ", err)
-		return err, status.Errorf(codes.Internal, "database connection error")
+		return nil, status.Errorf(codes.Internal, "database connection error")
 	}
 	defer conn.Release()
 
-	id := gofakeit.Number(0, 1000)
+	id := gofakeit.Number(1000, 9999)
 	name := gofakeit.Name()
 	password := gofakeit.Password(true, false, false, false, false, 32)
 	role := gofakeit.Number(1, 2)
@@ -137,15 +130,15 @@ func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Creat
 		Values(id, name, password, role).
 		ToSql()
 	if err != nil {
-		log.Println("failed to build query: ", err)
-		return err, status.Errorf(codes.Internal, "failed to build query")
+		log.Println("failed to build insert query: ", err)
+		return nil, status.Errorf(codes.Internal, "failed to build insert query")
 	}
 
 	_, err = conn.Exec(ctx, query, args...)
 	if err != nil {
 		log.Println("failed to insert user: ", err)
-		return err, status.Errorf(codes.Internal, "failed to create user")
+		return nil, status.Errorf(codes.Internal, "failed to insert user")
 	}
 
-	return return &desc.CreateResponse{}, nildesc.CreateResponse{Id: int64(id)}, nil
+	return &desc.CreateResponse{Id: int64(id)}, nil
 }
