@@ -6,7 +6,6 @@ import (
 	"github.com/beachrockhotel/auth/internal/config"
 	"github.com/beachrockhotel/auth/internal/config/env"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
-	"github.com/brianvoe/gofakeit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
@@ -137,23 +136,49 @@ func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Cre
 	}
 	defer conn.Release()
 
-	id := gofakeit.Number(1000, 9999)
-	name := req.GetInfo().GetName()
-	email := req.GetInfo().GetEmail()
-	role := req.GetInfo().GetRole().String()
-	password := req.GetPassword()
+	info := req.GetInfo()
+	if info == nil {
+		return nil, status.Errorf(codes.InvalidArgument, "user info is required")
+	}
+
+	name := strings.TrimSpace(info.GetName())
+	email := strings.TrimSpace(info.GetEmail())
+	roleEnum := info.GetRole()
+	password := strings.TrimSpace(req.GetPassword())
+	passwordConfirm := strings.TrimSpace(req.GetPasswordConfirm())
+
+	// Валидации
+	if name == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "name is required")
+	}
+	if email == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "email is required")
+	}
+	if password == "" {
+		return nil, status.Errorf(codes.InvalidArgument, "password is required")
+	}
+	if password != passwordConfirm {
+		return nil, status.Errorf(codes.InvalidArgument, "passwords do not match")
+	}
+	if roleEnum == desc.Role_ROLE_UNSPECIFIED {
+		return nil, status.Errorf(codes.InvalidArgument, "role is required and must be USER or ADMIN")
+	}
+
+	role := roleEnum.String()
 
 	query := `
-		INSERT INTO auth (id, name, email, password, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+		INSERT INTO auth (name, email, password, role, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, NOW(), NOW())
+		RETURNING id;
 	`
-	_, err = conn.Exec(ctx, query, id, name, email, password, role)
+	var id int64
+	err = conn.QueryRow(ctx, query, name, email, password, role).Scan(&id)
 	if err != nil {
 		log.Println("failed to insert user: ", err)
 		return nil, status.Errorf(codes.Internal, "failed to create user")
 	}
 
-	return &desc.CreateResponse{Id: int64(id)}, nil
+	return &desc.CreateResponse{Id: id}, nil
 }
 
 func main() {
