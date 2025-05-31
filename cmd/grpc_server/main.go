@@ -136,10 +136,10 @@ func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Cre
 
 	query := "INSERT INTO users_auth (id, user_name, password, role) VALUES ($1, $2, $3, $4)"
 	_, err = conn.Exec(ctx, query,
-		gofakeit.Number(0, 1000), // Random ID for the user
-		gofakeit.Name(),          // Random name
+		gofakeit.Number(0, 1000),                                // Random ID for the user
+		gofakeit.Name(),                                         // Random name
 		gofakeit.Password(true, false, false, false, false, 32), // Random password
-		gofakeit.Number(1, 2), // Random role
+		gofakeit.Number(1, 2),                                   // Random role
 	)
 	if err != nil {
 		log.Println("failed to insert user: ", err)
@@ -178,7 +178,7 @@ func main() {
 	}
 	s := grpc.NewServer()
 	reflection.Register(s)
-	desc.RegisterAuthV1Server(s, &Server{})
+	desc.RegisterAuthV1Server(s, &Server{pool: pool})
 	log.Printf("gRPC server listening at %v", lis.Addr())
 	if err := s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
