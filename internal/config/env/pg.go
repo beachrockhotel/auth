@@ -19,7 +19,7 @@ type pgConfig struct {
 func NewPGConfig() (*pgConfig, error) {
 	dsn := os.Getenv(dsnEnvName)
 	if len(dsn) == 0 {
-		errors.New("config env var " + dsnEnvName + " is not set")
+		return nil, errors.New("config env var " + dsnEnvName + " is not set")
 	}
 	return &pgConfig{dsn: dsn}, nil
 }
