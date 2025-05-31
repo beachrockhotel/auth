@@ -46,6 +46,7 @@ message GetResponse {
   UserInfo info = 2;
   google.protobuf.Timestamp created_at = 3;
   google.protobuf.Timestamp updated_at = 4;
+  string role_enum = 5; // добавлено строковое представление роли
 }
 
 message UpdateRequest {
@@ -53,7 +54,6 @@ message UpdateRequest {
   google.protobuf.StringValue name = 2;
   google.protobuf.StringValue email = 3;
 }
-
 
 message DeleteRequest {
   int64 id = 1;

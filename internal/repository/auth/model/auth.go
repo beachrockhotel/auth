@@ -13,7 +13,7 @@ type User struct {
 	Name      string
 	Email     string
 	Password  string
-	Role      Role
+	Role      string
 	CreatedAt time.Time
 	UpdatedAt sql.NullTime
 }

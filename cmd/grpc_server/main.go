@@ -17,6 +17,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"net"
+	"strings"
 	"time"
 )
 
@@ -31,6 +32,17 @@ type Server struct {
 	pool *pgxpool.Pool
 }
 
+func toRoleEnum(roleStr string) desc.Role {
+	switch strings.ToUpper(roleStr) {
+	case "USER":
+		return desc.Role_USER
+	case "ADMIN":
+		return desc.Role_ADMIN
+	default:
+		return desc.Role_ROLE_UNSPECIFIED
+	}
+}
+
 func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -43,11 +55,10 @@ func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 	row := conn.QueryRow(ctx, query, req.Id)
 
 	var id int64
-	var name, email string
-	var role int32
+	var name, email, roleStr string
 	var createdAt, updatedAt time.Time
 
-	err = row.Scan(&id, &name, &email, &role, &createdAt, &updatedAt)
+	err = row.Scan(&id, &name, &email, &roleStr, &createdAt, &updatedAt)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
@@ -56,12 +67,14 @@ func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 		return nil, status.Errorf(codes.Internal, "failed to retrieve user data")
 	}
 
+	roleEnum := toRoleEnum(roleStr)
+
 	return &desc.GetResponse{
 		Id: id,
 		Info: &desc.UserInfo{
 			Name:  name,
 			Email: email,
-			Role:  desc.Role(role),
+			Role:  roleEnum,
 		},
 		CreatedAt: timestamppb.New(createdAt),
 		UpdatedAt: timestamppb.New(updatedAt),
@@ -127,7 +140,7 @@ func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Cre
 	id := gofakeit.Number(1000, 9999)
 	name := req.GetInfo().GetName()
 	email := req.GetInfo().GetEmail()
-	role := req.GetInfo().GetRole()
+	role := req.GetInfo().GetRole().String()
 	password := req.GetPassword()
 
 	query := `
