@@ -39,14 +39,7 @@ func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 	}
 	defer conn.Release()
 
-	query := `SELECT id,
-       user_name,
-       user_email,
-       role, 
-       user_created,
-       user_update 
-FROM users_auth
-WHERE id = $1`
+	query := `SELECT id, name, email, role, created_at, updated_at FROM auth WHERE id = $1`
 	row := conn.QueryRow(ctx, query, req.Id)
 
 	var id int64
@@ -75,7 +68,6 @@ WHERE id = $1`
 	}, nil
 }
 
-// Update modifies user data in the database.
 func (s *Server) Update(ctx context.Context, req *desc.UpdateRequest) (*emptypb.Empty, error) {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -85,17 +77,17 @@ func (s *Server) Update(ctx context.Context, req *desc.UpdateRequest) (*emptypb.
 	defer conn.Release()
 
 	query := `
-        UPDATE users_auth
+        UPDATE auth
         SET 
-            user_name = COALESCE($1, user_name),
-            user_email = COALESCE($2, user_email),
-            user_update = $3
+            name = COALESCE($1, name),
+            email = COALESCE($2, email),
+            updated_at = $3
         WHERE id = $4;
     `
 	_, err = conn.Exec(ctx, query,
 		req.Name.GetValue(),
 		req.Email.GetValue(),
-		time.Now(), // Always update user_update with the current timestamp
+		time.Now(),
 		req.Id,
 	)
 	if err != nil {
@@ -106,7 +98,6 @@ func (s *Server) Update(ctx context.Context, req *desc.UpdateRequest) (*emptypb.
 	return &emptypb.Empty{}, nil
 }
 
-// Delete removes a user from the database.
 func (s *Server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.Empty, error) {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -115,7 +106,7 @@ func (s *Server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.
 	}
 	defer conn.Release()
 
-	query := `DELETE FROM users_auth WHERE id = $1`
+	query := `DELETE FROM auth WHERE id = $1`
 	_, err = conn.Exec(ctx, query, req.Id)
 	if err != nil {
 		log.Println("failed to delete user: ", err)
@@ -125,7 +116,6 @@ func (s *Server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.
 	return &emptypb.Empty{}, nil
 }
 
-// Create inserts a new user into the database.
 func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
 	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
@@ -134,19 +124,23 @@ func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.Cre
 	}
 	defer conn.Release()
 
-	query := "INSERT INTO users_auth (id, user_name, password, role) VALUES ($1, $2, $3, $4)"
-	_, err = conn.Exec(ctx, query,
-		gofakeit.Number(0, 1000),                                // Random ID for the user
-		gofakeit.Name(),                                         // Random name
-		gofakeit.Password(true, false, false, false, false, 32), // Random password
-		gofakeit.Number(1, 2),                                   // Random role
-	)
+	id := gofakeit.Number(1000, 9999)
+	name := req.GetInfo().GetName()
+	email := req.GetInfo().GetEmail()
+	role := req.GetInfo().GetRole()
+	password := req.GetPassword()
+
+	query := `
+		INSERT INTO auth (id, name, email, password, role, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+	`
+	_, err = conn.Exec(ctx, query, id, name, email, password, role)
 	if err != nil {
 		log.Println("failed to insert user: ", err)
 		return nil, status.Errorf(codes.Internal, "failed to create user")
 	}
 
-	return &desc.CreateResponse{}, nil
+	return &desc.CreateResponse{Id: int64(id)}, nil
 }
 
 func main() {
