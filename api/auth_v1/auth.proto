@@ -39,11 +39,15 @@ message GetRequest {
   int64 id = 1;
 }
 
-message GetResponse {
+message Auth {
   int64 id = 1;
   AuthInfo info = 2;
   google.protobuf.Timestamp created_at = 3;
   google.protobuf.Timestamp updated_at = 4;
+}
+
+message GetResponse {
+  Auth auth = 1;
 }
 
 message UpdateRequest {

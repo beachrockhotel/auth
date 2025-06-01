@@ -14,9 +14,14 @@ type pgClient struct {
 }
 
 func New(ctx context.Context, dsn string) (db.Client, error) {
-	dbc, err := pgxpool.Connect(ctx, dsn)
+	config, err := pgxpool.ParseConfig(dsn)
 	if err != nil {
-		return nil, errors.Errorf("failed to connect to db: %v", err)
+		return nil, errors.Wrap(err, "failed to parse config")
+	}
+
+	dbc, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create pool")
 	}
 
 	return &pgClient{
