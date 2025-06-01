@@ -14,7 +14,8 @@ type Auth struct {
 }
 
 type AuthInfo struct {
-	Name  string
-	Email string
-	Role  auth_v1.Role
+	Name     string
+	Email    string
+	Role     auth_v1.Role
+	Password string
 }

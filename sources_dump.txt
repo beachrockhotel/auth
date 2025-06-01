@@ -110,7 +110,7 @@ local-migration-status:
 	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} status -v
 
 local-migration-up:
-	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} up -v
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" up -v
 
 local-migration-down:
 	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} down -v
@@ -489,8 +489,7 @@ package db
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Handler - функция, которая выполняется в транзакции
@@ -865,6 +864,25 @@ func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.G
 	return &desc.GetResponse{
 		Auth: converter.ToAuthFromService(authObj),
 	}, nil
+}
+
+==== ./internal/api/auth/service.go ====
+package auth
+
+import (
+	"github.com/beachrockhotel/auth/internal/service"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+type Implementation struct {
+	desc.UnimplementedAuthV1Server
+	authService service.AuthService
+}
+
+func NewImplementation(authService service.AuthService) *Implementation {
+	return &Implementation{
+		authService: authService,
+	}
 }
 
 ==== ./internal/api/auth/create.go ====
@@ -1329,6 +1347,7 @@ message AuthInfo {
   string name = 1;
   string email = 2;
   Role role = 3;
+  string password = 4;
 }
 
 message CreateRequest {
@@ -1391,8 +1410,11 @@ POSTGRES_USER=auth-user
 POSTGRES_PASSWORD=auth-password
 MIGRATION_DIR=./migrations
 
-PG_DSN=host=localhost port=54321 dbname=note user=note-user password=note-password sslmode=disable
+PG_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
 PG_PORT=54321
+
+LOCAL_MIGRATION_DIR=./migrations
+LOCAL_MIGRATION_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
 
 GRPC_HOST=localhost
 GRPC_PORT=50051

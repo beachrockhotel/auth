@@ -23,16 +23,18 @@ func ToAuthFromService(auth *model.Auth) *desc.Auth {
 
 func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
 	return &desc.AuthInfo{
-		Name:  info.Name,
-		Email: info.Email,
-		Role:  info.Role,
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
 	}
 }
 
 func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
 	return &model.AuthInfo{
-		Name:  info.Name,
-		Email: info.Email,
-		Role:  info.Role,
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
 	}
 }
