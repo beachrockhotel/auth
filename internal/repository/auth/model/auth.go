@@ -1,19 +1,21 @@
 package model
 
-import "database/sql"
-
 import (
+	"database/sql"
+	"google.golang.org/grpc/tap"
 	"time"
 )
 
-type Role int32
+type Auth struct {
+	ID        int64 'db:"id"`'
+	Info *Info	'db:""`'
+	CreatedAt time.Time 'db:"created_at"`'
+	UpdatedAt sql.NullTime 'db:"updated_at"`'
+}
 
-type User struct {
-	ID        int64
-	Name      string
-	Email     string
-	Password  string
-	Role      string
-	CreatedAt time.Time
-	UpdatedAt sql.NullTime
+type Info struct {
+	Name string 'db:"name"'
+	Email string 'db:"email"'
+	Role string 'db:"role"'
+	Password string 'db:"password"'
 }

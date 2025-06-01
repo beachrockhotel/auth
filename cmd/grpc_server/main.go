@@ -2,17 +2,20 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"flag"
 	"github.com/beachrockhotel/auth/internal/config"
 	"github.com/beachrockhotel/auth/internal/config/env"
+	"github.com/beachrockhotel/auth/internal/converter"
+	"github.com/beachrockhotel/auth/internal/service"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/brianvoe/gofakeit"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/reflection"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"log"
 	"net"
@@ -20,15 +23,9 @@ import (
 	"time"
 )
 
-var configPath string
-
-func init() {
-	flag.StringVar(&configPath, "config_path", ".env", "path to config file")
-}
-
 type Server struct {
 	desc.UnimplementedAuthV1Server
-	pool *pgxpool.Pool
+	authService service.AuthService
 }
 
 func toRoleEnum(roleStr string) desc.Role {
@@ -43,176 +40,70 @@ func toRoleEnum(roleStr string) desc.Role {
 }
 
 func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
-	conn, err := s.pool.Acquire(ctx)
+	authObj, err := s.authService.Get(ctx, req.GetId())
 	if err != nil {
-		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
-	}
-	defer conn.Release()
-
-	query := `SELECT id, name, email, role, created_at, updated_at FROM auth WHERE id = $1`
-	row := conn.QueryRow(ctx, query, req.Id)
-
-	var id int64
-	var name, email, roleStr string
-	var createdAt, updatedAt time.Time
-
-	err = row.Scan(&id, &name, &email, &roleStr, &createdAt, &updatedAt)
-	if err != nil {
-		if err == pgx.ErrNoRows {
-			return nil, status.Errorf(codes.NotFound, "user with ID %d not found", req.Id)
-		}
-		log.Println("failed to scan row: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to retrieve user data")
+		return nil, err
 	}
 
-	roleEnum := toRoleEnum(roleStr)
+	log.Printf("id: %d, name: %s, email: %s, role: %s, password: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info)
 
 	return &desc.GetResponse{
-		Id: id,
-		Info: &desc.UserInfo{
-			Name:  name,
-			Email: email,
-			Role:  roleEnum,
-		},
-		CreatedAt: timestamppb.New(createdAt),
-		UpdatedAt: timestamppb.New(updatedAt),
+		Auth: converter.ToAuthInfoFromService(authObj),
 	}, nil
 }
 
-func (s *Server) Update(ctx context.Context, req *desc.UpdateRequest) (*emptypb.Empty, error) {
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
-	}
-	defer conn.Release()
-
-	query := `
-        UPDATE auth
-        SET 
-            name = COALESCE($1, name),
-            email = COALESCE($2, email),
-            updated_at = $3
-        WHERE id = $4;
-    `
-	_, err = conn.Exec(ctx, query,
-		req.Name.GetValue(),
-		req.Email.GetValue(),
-		time.Now(),
-		req.Id,
-	)
-	if err != nil {
-		log.Println("failed to update user: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to update user")
-	}
-
-	return &emptypb.Empty{}, nil
-}
-
-func (s *Server) Delete(ctx context.Context, req *desc.DeleteRequest) (*emptypb.Empty, error) {
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
-	}
-	defer conn.Release()
-
-	query := `DELETE FROM auth WHERE id = $1`
-	_, err = conn.Exec(ctx, query, req.Id)
-	if err != nil {
-		log.Println("failed to delete user: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to delete user")
-	}
-
-	return &emptypb.Empty{}, nil
-}
-
 func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
-	conn, err := s.pool.Acquire(ctx)
+	id, err := s.authService.Create(ctx, converter.ToAuthInfoFromDesc(req.GetInfo()))
 	if err != nil {
-		log.Println("failed to acquire connection from pool: ", err)
-		return nil, status.Errorf(codes.Internal, "database connection error")
-	}
-	defer conn.Release()
-
-	info := req.GetInfo()
-	if info == nil {
-		return nil, status.Errorf(codes.InvalidArgument, "user info is required")
+		return nil, err
 	}
 
-	name := strings.TrimSpace(info.GetName())
-	email := strings.TrimSpace(info.GetEmail())
-	roleEnum := info.GetRole()
-	password := strings.TrimSpace(req.GetPassword())
-	passwordConfirm := strings.TrimSpace(req.GetPasswordConfirm())
+	log.Printf("inserted auth with id: %d", id)
 
-	// Валидации
-	if name == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "name is required")
-	}
-	if email == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "email is required")
-	}
-	if password == "" {
-		return nil, status.Errorf(codes.InvalidArgument, "password is required")
-	}
-	if password != passwordConfirm {
-		return nil, status.Errorf(codes.InvalidArgument, "passwords do not match")
-	}
-	if roleEnum == desc.Role_ROLE_UNSPECIFIED {
-		return nil, status.Errorf(codes.InvalidArgument, "role is required and must be USER or ADMIN")
-	}
-
-	role := roleEnum.String()
-
-	query := `
-		INSERT INTO auth (name, email, password, role, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
-		RETURNING id;
-	`
-	var id int64
-	err = conn.QueryRow(ctx, query, name, email, password, role).Scan(&id)
-	if err != nil {
-		log.Println("failed to insert user: ", err)
-		return nil, status.Errorf(codes.Internal, "failed to create user")
-	}
-
-	return &desc.CreateResponse{Id: id}, nil
+	return &desc.CreateResponse{
+		Id: id,
+	}, nil
 }
 
 func main() {
-	flag.Parse()
-	err := config.Load(configPath)
+	ctx := context.Background()
+
+	err := config.Load(".env")
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("failed to load config: %v", err)
 	}
 
-	grpcConfig, err := env.NewGRPCConfig()
+	grpcConfig, err := config.NewGRPCConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("failed to get grpc config: %v", err)
 	}
 
-	pgConfig, err := env.NewPGConfig()
+	pgConfig, err := config.NewPGConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		log.Fatalf("failed to get pg config: %v", err)
 	}
 
-	pool, err := pgxpool.New(context.Background(), pgConfig.DSN())
-	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-	defer pool.Close()
-
-	lis, err := net.Listen("tcp", grpcConfig.Address())
+	lis, err := net.Listen("tcp", grpcConfig.GRPCAddress())
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
+
+	pool, err := pgxpool.Connect(ctx, pgConfig.DSN())
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	authRepo := authRepository.NewRepository(pool)
+	authSrv := authService.NewService(authRepo)
+
 	s := grpc.NewServer()
 	reflection.Register(s)
-	desc.RegisterAuthV1Server(s, &Server{pool: pool})
-	log.Printf("gRPC server listening at %v", lis.Addr())
-	if err := s.Serve(lis); err != nil {
+	desc.RegisterAuthV1Server(s, &Server{pool: pgConfig})
+
+	log.Printf("server listening at %v", lis.Addr())
+
+	if err = s.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
