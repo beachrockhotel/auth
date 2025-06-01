@@ -1,0 +1,1699 @@
+Файлы и их содержимое (только релевантные):
+------------------------------------------
+
+--- ./show_sources.sh ---
+#!/bin/bash
+
+ROOT_DIR="./"
+
+echo "Файлы и их содержимое (только релевантные):"
+echo "------------------------------------------"
+
+find "$ROOT_DIR" -type f \( \
+    -name "*.go" -o \
+    -name "go.mod" -o \
+    -name "go.sum" -o \
+    -name "*.proto" -o \
+    -name "*.Dockerfile" -o \
+    -name "Dockerfile" -o \
+    -name "docker-compose.yaml" -o \
+    -name "*.sh" -o \
+    -name "*.sql" -o \
+    -name "*.env" \
+\) | while read -r file; do
+    echo -e "\n--- $file ---"
+    cat "$file"
+done
+
+--- ./go.sum ---
+github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
+github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
+github.com/brianvoe/gofakeit v3.18.0+incompatible h1:wDOmHc9DLG4nRjUVVaxA+CEglKOW72Y5+4WNxUIkjM8=
+github.com/brianvoe/gofakeit v3.18.0+incompatible/go.mod h1:kfwdRA90vvNhPutZWfH7WPaDzUjz+CZFqG+rPkOjGOc=
+github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
+github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
+github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
+github.com/go-logr/logr v1.4.2/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
+github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
+github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
+github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
+github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
+github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
+github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
+github.com/google/uuid v1.6.0 h1:NIvaJDMOsjHA8n1jAhLSgzrAzy1Hgr+hNrb57e+94F0=
+github.com/google/uuid v1.6.0/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
+github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
+github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
+github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
+github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761/go.mod h1:5TJZWKEWniPve33vlWYSoGYefn3gLQRzjfDlhSJ9ZKM=
+github.com/jackc/pgx/v5 v5.7.4 h1:9wKznZrhWa2QiHL+NjTSPP6yjl3451BX3imWDnokYlg=
+github.com/jackc/pgx/v5 v5.7.4/go.mod h1:ncY89UGWxg82EykZUwSpUKEfccBGGYq1xjrOpsbsfGQ=
+github.com/jackc/puddle/v2 v2.2.2 h1:PR8nw+E/1w0GLuRFSmiioY6UooMp6KJv0/61nB7icHo=
+github.com/jackc/puddle/v2 v2.2.2/go.mod h1:vriiEXHvEE654aYKXXjOvZM39qJ0q+azkZFrfEOc3H4=
+github.com/joho/godotenv v1.5.1 h1:7eLL/+HRGLY0ldzfGMeQkb7vMd0as4CfYvUVzLqw0N0=
+github.com/joho/godotenv v1.5.1/go.mod h1:f4LDr5Voq0i2e/R5DDNOoa2zzDfwtkZa6DnEwAbqwq4=
+github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 h1:SOEGU9fKiNWd/HOJuq6+3iTQz8KNCLtVX6idSoTLdUw=
+github.com/lann/builder v0.0.0-20180802200727-47ae307949d0/go.mod h1:dXGbAdH5GtBTC4WfIxhKZfyBF/HBFgRZSWwZ9g/He9o=
+github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 h1:P6pPBnrTSX3DEVR4fDembhRWSsG5rVo6hYhAB/ADZrk=
+github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0/go.mod h1:vmVJ0l/dxyfGW6FmdpVm2joNMFikkuWg0EoCKLGUMNw=
+github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
+github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
+github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
+github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
+github.com/stretchr/testify v1.7.0/go.mod h1:6Fq8oRcR53rry900zMqJjRRixrwX3KX962/h/Wwjteg=
+github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
+github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
+go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
+go.opentelemetry.io/auto/sdk v1.1.0/go.mod h1:3wSPjt5PWp2RhlCcmmOial7AvC4DQqZb7a7wCow3W8A=
+go.opentelemetry.io/otel v1.34.0 h1:zRLXxLCgL1WyKsPVrgbSdMN4c0FMkDAskSTQP+0hdUY=
+go.opentelemetry.io/otel v1.34.0/go.mod h1:OWFPOQ+h4G8xpyjgqo4SxJYdDQ/qmRH+wivy7zzx9oI=
+go.opentelemetry.io/otel/metric v1.34.0 h1:+eTR3U0MyfWjRDhmFMxe2SsW64QrZ84AOhvqS7Y+PoQ=
+go.opentelemetry.io/otel/metric v1.34.0/go.mod h1:CEDrp0fy2D0MvkXE+dPV7cMi8tWZwX3dmaIhwPOaqHE=
+go.opentelemetry.io/otel/sdk v1.34.0 h1:95zS4k/2GOy069d321O8jWgYsW3MzVV+KuSPKp7Wr1A=
+go.opentelemetry.io/otel/sdk v1.34.0/go.mod h1:0e/pNiaMAqaykJGKbi+tSjWfNNHMTxoC9qANsCzbyxU=
+go.opentelemetry.io/otel/sdk/metric v1.34.0 h1:5CeK9ujjbFVL5c1PhLuStg1wxA7vQv7ce1EK0Gyvahk=
+go.opentelemetry.io/otel/sdk/metric v1.34.0/go.mod h1:jQ/r8Ze28zRKoNRdkjCZxfs6YvBTG1+YIqyFVFYec5w=
+go.opentelemetry.io/otel/trace v1.34.0 h1:+ouXS2V8Rd4hp4580a8q23bg0azF2nI8cqLYnC8mh/k=
+go.opentelemetry.io/otel/trace v1.34.0/go.mod h1:Svm7lSjQD7kG7KJ/MUHPVXSDGz2OX4h0M2jHBhmSfRE=
+golang.org/x/crypto v0.33.0 h1:IOBPskki6Lysi0lo9qQvbxiQ+FvsCC/YWOecCHAixus=
+golang.org/x/crypto v0.33.0/go.mod h1:bVdXmD7IV/4GdElGPozy6U7lWdRXA4qyRVGJV57uQ5M=
+golang.org/x/net v0.35.0 h1:T5GQRQb2y08kTAByq9L4/bz8cipCdA8FbRTXewonqY8=
+golang.org/x/net v0.35.0/go.mod h1:EglIi67kWsHKlRzzVMUD93VMSWGFOMSZgxFjparz1Qk=
+golang.org/x/sync v0.11.0 h1:GGz8+XQP4FvTTrjZPzNKTMFtSXH80RAzG+5ghFPgK9w=
+golang.org/x/sync v0.11.0/go.mod h1:Czt+wKu1gCyEFDUtn0jG5QVvpJ6rzVqr5aXyt9drQfk=
+golang.org/x/sys v0.30.0 h1:QjkSwP/36a20jFYWkSue1YwXzLmsV5Gfq7Eiy72C1uc=
+golang.org/x/sys v0.30.0/go.mod h1:/VUhepiaJMQUp4+oa/7Zr1D23ma6VTLIYjOOTFZPUcA=
+golang.org/x/text v0.22.0 h1:bofq7m3/HAFvbF51jz3Q9wLg3jkvSPuiZu/pD1XwgtM=
+golang.org/x/text v0.22.0/go.mod h1:YRoo4H8PVmsu+E3Ou7cqLVH8oXWIHVoX0jqUWALQhfY=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a h1:51aaUVRocpvUOSQKM6Q7VuoaktNIaMCLuhZB6DKksq4=
+google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a/go.mod h1:uRxBH1mhmO8PGhU89cMcHaXKZqO+OfakD8QQO0oYwlQ=
+google.golang.org/grpc v1.72.0 h1:S7UkcVa60b5AAQTaO6ZKamFp1zMZSU0fGDK2WZLbBnM=
+google.golang.org/grpc v1.72.0/go.mod h1:wH5Aktxcg25y1I3w7H69nHfXdOG3UiadoBtjh3izSDM=
+google.golang.org/protobuf v1.36.6 h1:z1NpPI8ku2WgiWnf+t9wTPsn6eP1L7ksHUlkfLvd9xY=
+google.golang.org/protobuf v1.36.6/go.mod h1:jduwjTPXsFjZGTmRluh+L6NjiWu7pchiJ2/5YcXBHnY=
+gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+
+--- ./pkg/auth_v1/auth_grpc.pb.go ---
+// Code generated by protoc-gen-go-grpc. DO NOT EDIT.
+// versions:
+// - protoc-gen-go-grpc v1.2.0
+// - protoc             v3.21.12
+// source: auth.proto
+
+package auth_v1
+
+import (
+	context "context"
+	grpc "google.golang.org/grpc"
+	codes "google.golang.org/grpc/codes"
+	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
+)
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the grpc package it is being compiled against.
+// Requires gRPC-Go v1.32.0 or later.
+const _ = grpc.SupportPackageIsVersion7
+
+// AuthV1Client is the client API for AuthV1 service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type AuthV1Client interface {
+	Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error)
+	Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error)
+	Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+}
+
+type authV1Client struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewAuthV1Client(cc grpc.ClientConnInterface) AuthV1Client {
+	return &authV1Client{cc}
+}
+
+func (c *authV1Client) Create(ctx context.Context, in *CreateRequest, opts ...grpc.CallOption) (*CreateResponse, error) {
+	out := new(CreateResponse)
+	err := c.cc.Invoke(ctx, "/auth_v1.AuthV1/Create", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authV1Client) Get(ctx context.Context, in *GetRequest, opts ...grpc.CallOption) (*GetResponse, error) {
+	out := new(GetResponse)
+	err := c.cc.Invoke(ctx, "/auth_v1.AuthV1/Get", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authV1Client) Update(ctx context.Context, in *UpdateRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/auth_v1.AuthV1/Update", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *authV1Client) Delete(ctx context.Context, in *DeleteRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, "/auth_v1.AuthV1/Delete", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// AuthV1Server is the server API for AuthV1 service.
+// All implementations must embed UnimplementedAuthV1Server
+// for forward compatibility
+type AuthV1Server interface {
+	Create(context.Context, *CreateRequest) (*CreateResponse, error)
+	Get(context.Context, *GetRequest) (*GetResponse, error)
+	Update(context.Context, *UpdateRequest) (*emptypb.Empty, error)
+	Delete(context.Context, *DeleteRequest) (*emptypb.Empty, error)
+	mustEmbedUnimplementedAuthV1Server()
+}
+
+// UnimplementedAuthV1Server must be embedded to have forward compatible implementations.
+type UnimplementedAuthV1Server struct {
+}
+
+func (UnimplementedAuthV1Server) Create(context.Context, *CreateRequest) (*CreateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Create not implemented")
+}
+func (UnimplementedAuthV1Server) Get(context.Context, *GetRequest) (*GetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Get not implemented")
+}
+func (UnimplementedAuthV1Server) Update(context.Context, *UpdateRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Update not implemented")
+}
+func (UnimplementedAuthV1Server) Delete(context.Context, *DeleteRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Delete not implemented")
+}
+func (UnimplementedAuthV1Server) mustEmbedUnimplementedAuthV1Server() {}
+
+// UnsafeAuthV1Server may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to AuthV1Server will
+// result in compilation errors.
+type UnsafeAuthV1Server interface {
+	mustEmbedUnimplementedAuthV1Server()
+}
+
+func RegisterAuthV1Server(s grpc.ServiceRegistrar, srv AuthV1Server) {
+	s.RegisterService(&AuthV1_ServiceDesc, srv)
+}
+
+func _AuthV1_Create_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthV1Server).Create(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/auth_v1.AuthV1/Create",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthV1Server).Create(ctx, req.(*CreateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthV1_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthV1Server).Get(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/auth_v1.AuthV1/Get",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthV1Server).Get(ctx, req.(*GetRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthV1_Update_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthV1Server).Update(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/auth_v1.AuthV1/Update",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthV1Server).Update(ctx, req.(*UpdateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AuthV1_Delete_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AuthV1Server).Delete(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/auth_v1.AuthV1/Delete",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AuthV1Server).Delete(ctx, req.(*DeleteRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// AuthV1_ServiceDesc is the grpc.ServiceDesc for AuthV1 service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var AuthV1_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "auth_v1.AuthV1",
+	HandlerType: (*AuthV1Server)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Create",
+			Handler:    _AuthV1_Create_Handler,
+		},
+		{
+			MethodName: "Get",
+			Handler:    _AuthV1_Get_Handler,
+		},
+		{
+			MethodName: "Update",
+			Handler:    _AuthV1_Update_Handler,
+		},
+		{
+			MethodName: "Delete",
+			Handler:    _AuthV1_Delete_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "auth.proto",
+}
+
+--- ./pkg/auth_v1/auth.pb.go ---
+// Code generated by protoc-gen-go. DO NOT EDIT.
+// versions:
+// 	protoc-gen-go v1.28.1
+// 	protoc        v3.21.12
+// source: auth.proto
+
+package auth_v1
+
+import (
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
+	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
+	reflect "reflect"
+	sync "sync"
+)
+
+const (
+	// Verify that this generated code is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(20 - protoimpl.MinVersion)
+	// Verify that runtime/protoimpl is sufficiently up-to-date.
+	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
+)
+
+type Role int32
+
+const (
+	Role_ROLE_UNSPECIFIED Role = 0
+	Role_USER             Role = 1
+	Role_ADMIN            Role = 2
+)
+
+// Enum value maps for Role.
+var (
+	Role_name = map[int32]string{
+		0: "ROLE_UNSPECIFIED",
+		1: "USER",
+		2: "ADMIN",
+	}
+	Role_value = map[string]int32{
+		"ROLE_UNSPECIFIED": 0,
+		"USER":             1,
+		"ADMIN":            2,
+	}
+)
+
+func (x Role) Enum() *Role {
+	p := new(Role)
+	*p = x
+	return p
+}
+
+func (x Role) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Role) Descriptor() protoreflect.EnumDescriptor {
+	return file_auth_proto_enumTypes[0].Descriptor()
+}
+
+func (Role) Type() protoreflect.EnumType {
+	return &file_auth_proto_enumTypes[0]
+}
+
+func (x Role) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Role.Descriptor instead.
+func (Role) EnumDescriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{0}
+}
+
+type UserInfo struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Email string `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	Role  Role   `protobuf:"varint,3,opt,name=role,proto3,enum=auth_v1.Role" json:"role,omitempty"`
+}
+
+func (x *UserInfo) Reset() {
+	*x = UserInfo{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UserInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UserInfo) ProtoMessage() {}
+
+func (x *UserInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UserInfo.ProtoReflect.Descriptor instead.
+func (*UserInfo) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *UserInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UserInfo) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
+func (x *UserInfo) GetRole() Role {
+	if x != nil {
+		return x.Role
+	}
+	return Role_ROLE_UNSPECIFIED
+}
+
+type CreateRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Info            *UserInfo `protobuf:"bytes,1,opt,name=info,proto3" json:"info,omitempty"`
+	Password        string    `protobuf:"bytes,3,opt,name=password,proto3" json:"password,omitempty"`
+	PasswordConfirm string    `protobuf:"bytes,4,opt,name=password_confirm,json=passwordConfirm,proto3" json:"password_confirm,omitempty"`
+}
+
+func (x *CreateRequest) Reset() {
+	*x = CreateRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CreateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateRequest) ProtoMessage() {}
+
+func (x *CreateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateRequest.ProtoReflect.Descriptor instead.
+func (*CreateRequest) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *CreateRequest) GetInfo() *UserInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *CreateRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *CreateRequest) GetPasswordConfirm() string {
+	if x != nil {
+		return x.PasswordConfirm
+	}
+	return ""
+}
+
+type CreateResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *CreateResponse) Reset() {
+	*x = CreateResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CreateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CreateResponse) ProtoMessage() {}
+
+func (x *CreateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CreateResponse.ProtoReflect.Descriptor instead.
+func (*CreateResponse) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *CreateResponse) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type GetRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *GetRequest) Reset() {
+	*x = GetRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[3]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetRequest) ProtoMessage() {}
+
+func (x *GetRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[3]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetRequest.ProtoReflect.Descriptor instead.
+func (*GetRequest) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type GetResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id        int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Info      *UserInfo              `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
+	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	UpdatedAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	RoleEnum  string                 `protobuf:"bytes,5,opt,name=role_enum,json=roleEnum,proto3" json:"role_enum,omitempty"` // добавлено строковое представление роли
+}
+
+func (x *GetResponse) Reset() {
+	*x = GetResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[4]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *GetResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetResponse) ProtoMessage() {}
+
+func (x *GetResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[4]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetResponse.ProtoReflect.Descriptor instead.
+func (*GetResponse) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *GetResponse) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *GetResponse) GetInfo() *UserInfo {
+	if x != nil {
+		return x.Info
+	}
+	return nil
+}
+
+func (x *GetResponse) GetCreatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *GetResponse) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
+func (x *GetResponse) GetRoleEnum() string {
+	if x != nil {
+		return x.RoleEnum
+	}
+	return ""
+}
+
+type UpdateRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id    int64                   `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Name  *wrapperspb.StringValue `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Email *wrapperspb.StringValue `protobuf:"bytes,3,opt,name=email,proto3" json:"email,omitempty"`
+}
+
+func (x *UpdateRequest) Reset() {
+	*x = UpdateRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *UpdateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateRequest) ProtoMessage() {}
+
+func (x *UpdateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateRequest) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *UpdateRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *UpdateRequest) GetName() *wrapperspb.StringValue {
+	if x != nil {
+		return x.Name
+	}
+	return nil
+}
+
+func (x *UpdateRequest) GetEmail() *wrapperspb.StringValue {
+	if x != nil {
+		return x.Email
+	}
+	return nil
+}
+
+type DeleteRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id int64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *DeleteRequest) Reset() {
+	*x = DeleteRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_auth_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *DeleteRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteRequest) ProtoMessage() {}
+
+func (x *DeleteRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_auth_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteRequest.ProtoReflect.Descriptor instead.
+func (*DeleteRequest) Descriptor() ([]byte, []int) {
+	return file_auth_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *DeleteRequest) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+var File_auth_proto protoreflect.FileDescriptor
+
+var file_auth_proto_rawDesc = []byte{
+	0x0a, 0x0a, 0x61, 0x75, 0x74, 0x68, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x07, 0x61, 0x75,
+	0x74, 0x68, 0x5f, 0x76, 0x31, 0x1a, 0x1f, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70,
+	0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x1a, 0x1b, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2f, 0x65, 0x6d, 0x70, 0x74, 0x79, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x1a, 0x1e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2f, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x62, 0x75, 0x66, 0x2f, 0x77, 0x72, 0x61, 0x70, 0x70, 0x65, 0x72, 0x73, 0x2e, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x22, 0x57, 0x0a, 0x08, 0x55, 0x73, 0x65, 0x72, 0x49, 0x6e, 0x66, 0x6f, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x12, 0x14, 0x0a, 0x05, 0x65, 0x6d, 0x61, 0x69, 0x6c, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x09, 0x52, 0x05, 0x65, 0x6d, 0x61, 0x69, 0x6c, 0x12, 0x21, 0x0a, 0x04, 0x72, 0x6f, 0x6c,
+	0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x0d, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76,
+	0x31, 0x2e, 0x52, 0x6f, 0x6c, 0x65, 0x52, 0x04, 0x72, 0x6f, 0x6c, 0x65, 0x22, 0x7d, 0x0a, 0x0d,
+	0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a,
+	0x04, 0x69, 0x6e, 0x66, 0x6f, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x61, 0x75,
+	0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x55, 0x73, 0x65, 0x72, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x04,
+	0x69, 0x6e, 0x66, 0x6f, 0x12, 0x1a, 0x0a, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64,
+	0x12, 0x29, 0x0a, 0x10, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0x5f, 0x63, 0x6f, 0x6e,
+	0x66, 0x69, 0x72, 0x6d, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x0f, 0x70, 0x61, 0x73, 0x73,
+	0x77, 0x6f, 0x72, 0x64, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x72, 0x6d, 0x22, 0x20, 0x0a, 0x0e, 0x43,
+	0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a,
+	0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x22, 0x1c, 0x0a,
+	0x0a, 0x47, 0x65, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x22, 0xd7, 0x01, 0x0a, 0x0b,
+	0x47, 0x65, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69,
+	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x12, 0x25, 0x0a, 0x04, 0x69,
+	0x6e, 0x66, 0x6f, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x61, 0x75, 0x74, 0x68,
+	0x5f, 0x76, 0x31, 0x2e, 0x55, 0x73, 0x65, 0x72, 0x49, 0x6e, 0x66, 0x6f, 0x52, 0x04, 0x69, 0x6e,
+	0x66, 0x6f, 0x12, 0x39, 0x0a, 0x0a, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
+	0x6d, 0x70, 0x52, 0x09, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x39, 0x0a,
+	0x0a, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x62, 0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x09, 0x75,
+	0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x72, 0x6f, 0x6c, 0x65,
+	0x5f, 0x65, 0x6e, 0x75, 0x6d, 0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x72, 0x6f, 0x6c,
+	0x65, 0x45, 0x6e, 0x75, 0x6d, 0x22, 0x85, 0x01, 0x0a, 0x0d, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x12, 0x30, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e, 0x67, 0x56, 0x61,
+	0x6c, 0x75, 0x65, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x32, 0x0a, 0x05, 0x65, 0x6d, 0x61,
+	0x69, 0x6c, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c,
+	0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x53, 0x74, 0x72, 0x69, 0x6e,
+	0x67, 0x56, 0x61, 0x6c, 0x75, 0x65, 0x52, 0x05, 0x65, 0x6d, 0x61, 0x69, 0x6c, 0x22, 0x1f, 0x0a,
+	0x0d, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x0e,
+	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x02, 0x69, 0x64, 0x2a, 0x31,
+	0x0a, 0x04, 0x52, 0x6f, 0x6c, 0x65, 0x12, 0x14, 0x0a, 0x10, 0x52, 0x4f, 0x4c, 0x45, 0x5f, 0x55,
+	0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45, 0x44, 0x10, 0x00, 0x12, 0x08, 0x0a, 0x04,
+	0x55, 0x53, 0x45, 0x52, 0x10, 0x01, 0x12, 0x09, 0x0a, 0x05, 0x41, 0x44, 0x4d, 0x49, 0x4e, 0x10,
+	0x02, 0x32, 0xe9, 0x01, 0x0a, 0x06, 0x41, 0x75, 0x74, 0x68, 0x56, 0x31, 0x12, 0x39, 0x0a, 0x06,
+	0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x12, 0x16, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31,
+	0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x17,
+	0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x30, 0x0a, 0x03, 0x47, 0x65, 0x74, 0x12, 0x13,
+	0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x47, 0x65, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x1a, 0x14, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x47, 0x65,
+	0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x38, 0x0a, 0x06, 0x55, 0x70, 0x64,
+	0x61, 0x74, 0x65, 0x12, 0x16, 0x2e, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x55, 0x70,
+	0x64, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f,
+	0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d,
+	0x70, 0x74, 0x79, 0x12, 0x38, 0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x16, 0x2e,
+	0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x16, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x62, 0x75, 0x66, 0x2e, 0x45, 0x6d, 0x70, 0x74, 0x79, 0x42, 0x34, 0x5a,
+	0x32, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x62, 0x65, 0x61, 0x63,
+	0x68, 0x72, 0x6f, 0x63, 0x6b, 0x68, 0x6f, 0x74, 0x65, 0x6c, 0x2f, 0x61, 0x75, 0x74, 0x68, 0x2f,
+	0x70, 0x6b, 0x67, 0x2f, 0x61, 0x75, 0x74, 0x68, 0x5f, 0x76, 0x31, 0x3b, 0x61, 0x75, 0x74, 0x68,
+	0x5f, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+}
+
+var (
+	file_auth_proto_rawDescOnce sync.Once
+	file_auth_proto_rawDescData = file_auth_proto_rawDesc
+)
+
+func file_auth_proto_rawDescGZIP() []byte {
+	file_auth_proto_rawDescOnce.Do(func() {
+		file_auth_proto_rawDescData = protoimpl.X.CompressGZIP(file_auth_proto_rawDescData)
+	})
+	return file_auth_proto_rawDescData
+}
+
+var file_auth_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_auth_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_auth_proto_goTypes = []interface{}{
+	(Role)(0),                      // 0: auth_v1.Role
+	(*UserInfo)(nil),               // 1: auth_v1.UserInfo
+	(*CreateRequest)(nil),          // 2: auth_v1.CreateRequest
+	(*CreateResponse)(nil),         // 3: auth_v1.CreateResponse
+	(*GetRequest)(nil),             // 4: auth_v1.GetRequest
+	(*GetResponse)(nil),            // 5: auth_v1.GetResponse
+	(*UpdateRequest)(nil),          // 6: auth_v1.UpdateRequest
+	(*DeleteRequest)(nil),          // 7: auth_v1.DeleteRequest
+	(*timestamppb.Timestamp)(nil),  // 8: google.protobuf.Timestamp
+	(*wrapperspb.StringValue)(nil), // 9: google.protobuf.StringValue
+	(*emptypb.Empty)(nil),          // 10: google.protobuf.Empty
+}
+var file_auth_proto_depIdxs = []int32{
+	0,  // 0: auth_v1.UserInfo.role:type_name -> auth_v1.Role
+	1,  // 1: auth_v1.CreateRequest.info:type_name -> auth_v1.UserInfo
+	1,  // 2: auth_v1.GetResponse.info:type_name -> auth_v1.UserInfo
+	8,  // 3: auth_v1.GetResponse.created_at:type_name -> google.protobuf.Timestamp
+	8,  // 4: auth_v1.GetResponse.updated_at:type_name -> google.protobuf.Timestamp
+	9,  // 5: auth_v1.UpdateRequest.name:type_name -> google.protobuf.StringValue
+	9,  // 6: auth_v1.UpdateRequest.email:type_name -> google.protobuf.StringValue
+	2,  // 7: auth_v1.AuthV1.Create:input_type -> auth_v1.CreateRequest
+	4,  // 8: auth_v1.AuthV1.Get:input_type -> auth_v1.GetRequest
+	6,  // 9: auth_v1.AuthV1.Update:input_type -> auth_v1.UpdateRequest
+	7,  // 10: auth_v1.AuthV1.Delete:input_type -> auth_v1.DeleteRequest
+	3,  // 11: auth_v1.AuthV1.Create:output_type -> auth_v1.CreateResponse
+	5,  // 12: auth_v1.AuthV1.Get:output_type -> auth_v1.GetResponse
+	10, // 13: auth_v1.AuthV1.Update:output_type -> google.protobuf.Empty
+	10, // 14: auth_v1.AuthV1.Delete:output_type -> google.protobuf.Empty
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
+}
+
+func init() { file_auth_proto_init() }
+func file_auth_proto_init() {
+	if File_auth_proto != nil {
+		return
+	}
+	if !protoimpl.UnsafeEnabled {
+		file_auth_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UserInfo); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CreateRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CreateResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*GetResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*UpdateRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_auth_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*DeleteRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+	}
+	type x struct{}
+	out := protoimpl.TypeBuilder{
+		File: protoimpl.DescBuilder{
+			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
+			RawDescriptor: file_auth_proto_rawDesc,
+			NumEnums:      1,
+			NumMessages:   7,
+			NumExtensions: 0,
+			NumServices:   1,
+		},
+		GoTypes:           file_auth_proto_goTypes,
+		DependencyIndexes: file_auth_proto_depIdxs,
+		EnumInfos:         file_auth_proto_enumTypes,
+		MessageInfos:      file_auth_proto_msgTypes,
+	}.Build()
+	File_auth_proto = out.File
+	file_auth_proto_rawDesc = nil
+	file_auth_proto_goTypes = nil
+	file_auth_proto_depIdxs = nil
+}
+
+--- ./internal/converter/auth.go ---
+package converter
+
+import (
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/golang/protobuf/ptypes/timestamp"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+func ToAuthFromService(auth *model.Auth) *desc.GetResponse {
+	var updatedAt *timestamppb.Timestamp
+	if auth.UpdatedAt.Valid {
+		updatedAt = timestamppb.New(auth.UpdatedAt.Time)
+	}
+
+	return &desc.GetResponse{
+		Id: auth.ID,
+		Info: &desc.UserInfo{
+			Name:  auth.Info.Name,
+			Email: auth.Info.Email,
+			Role:  desc.Role(desc.Role_value[auth.Info.Role]),
+		},
+		CreatedAt: timestamppb.New(auth.CreatedAt),
+		UpdatedAt: updatedAt,
+		RoleEnum:  auth.Info.Role,
+	}
+}
+
+func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
+	return &desc.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+func ToAuthInfoFromDesc(info desc.AuthInfo) *model.AuthInfo {
+	return &desc.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+--- ./internal/model/auth.go ---
+package model
+
+import (
+	"database/sql"
+	"time"
+)
+
+type Auth struct {
+	ID         int64
+	Info       AuthInfo
+	created_at time.Time
+	updated_at sql.NullTime
+}
+
+type AuthInfo struct {
+	Name     string
+	Email    string
+	Role     string
+	Password string
+}
+
+--- ./internal/service/service.go ---
+package service
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthService interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+--- ./internal/service/note/get.go ---
+package note
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func (s *serv) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	return nil, nil
+}
+
+--- ./internal/service/note/service.go ---
+package note
+
+import (
+	"github.com/beachrockhotel/auth/internal/repository"
+	def "github.com/beachrockhotel/auth/internal/service"
+)
+
+var _ def.AuthService = (*serv)(nil)
+
+type serv struct {
+	authRepository repository.AuthRepository
+}
+
+func NewService(authRepository repository.AuthRepository) *serv {
+	return &serv{
+		authRepository: authRepository,
+	}
+}
+
+--- ./internal/service/note/create.go ---
+package note
+
+import "github.com/beachrockhotel/auth/internal/model"
+
+func (s *serv) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	id, err := s.authRepository.Create(ctx, info)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+--- ./internal/repository/auth/converter/auth.go ---
+package converter
+
+import (
+	"github.com/beachrockhotel/auth/internal/model"
+	"google.golang.org/protobuf/types/known/timestamppb"
+)
+
+func ToNoteFromRepo(auth *model.Auth) *desc.Auth {
+	var updatedAt *timestamppb.Timestamp
+	if auth.UpdatedAt.Valid {
+		updatedAt = timestamppb.New(auth.UpdatedAt.Time)
+	}
+
+	return &desc.Auth{
+		Id:        auth.ID,
+		Info:      ToAuthInfoFromRepo(auth.Info),
+		CreatedAt: timestamppb.New(auth.CreatedAt),
+		UpdatedAt: updatedAt,
+	}
+}
+
+func ToAuthInfoFromRepo(info *model.AuthInfo) *model.AuthInfo {
+	return &model.AuthInfo{
+		Name:     auth.Name,
+		Email:    auth.Email,
+		Role:     auth.Role,
+		Password: auth.Password,
+	}
+}
+
+--- ./internal/repository/auth/model/auth.go ---
+package model
+
+import (
+	"database/sql"
+	"time"
+)
+
+type Auth struct {
+	ID        int64 `db:"id"`
+	Info      *Info
+	CreatedAt time.Time    `db:"created_at"`
+	UpdatedAt sql.NullTime `db:"updated_at"`
+}
+
+type Info struct {
+	Name     string `db:"name"`
+	Email    string `db:"email"`
+	Role     string `db:"role"`
+	Password string `db:"password"`
+}
+
+--- ./internal/repository/auth/repository.go ---
+package auth
+
+import (
+	"context"
+	"log"
+	"time"
+
+	"github.com/Masterminds/squirrel"
+	"github.com/beachrockhotel/auth/internal/repository/auth/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/brianvoe/gofakeit"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	tableName = "auth"
+
+	idColumn        = "id"
+	nameColumn      = "name"
+	emailColumn     = "email"
+	roleColumn      = "role"
+	passwordColumn  = "password"
+	createdAtColumn = "created_at"
+	updatedAtColumn = "updated_at"
+)
+
+type repo struct {
+	db *pgxpool.Pool
+}
+
+func NewRepository(db *pgxpool.Pool) *repo {
+	return &repo{db: db}
+}
+
+func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error) {
+	builder := (sq.Select(idColumn, nameColumn, emailColumn, roleColumn, passwordColumn, createdAtColumn, updatedAtColumn).
+		From(tableName).
+		Where(sq.Eq{idColumn: id}).
+		Limit(1)
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var auth model.Auth
+	err = r.db.QueryRow(ctx, query, args...).Scan(&auth.ID, &auth.Info.Name, &auth.Info.Email, &auth.Info.Role, &auth.Info.Password, &auth.Info.CreatedAt, &auth.Info.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.ToAuthFromRepo(auth), nil
+}
+
+func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	builder := (sq.Insert(tableName).
+		Columns(nameColumn, emailColumn, roleColumn, passwordColumn).
+		Values(info.Name, info.Email, info.Role, info.Password).
+		Suffix("RETURNING id")
+
+	query, args, err := builder.ToSQL()
+	if err != nil {
+		return nil, err
+	}
+
+	var id int64
+	err = r.db.QueryRow(ctx, query, args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+--- ./internal/repository/repository.go ---
+package repository
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthRepository interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+--- ./internal/config/config.go ---
+package config
+
+import "github.com/joho/godotenv"
+
+func Load(path string) error {
+	err := godotenv.Load(path)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+type GRPCConfig interface {
+	Address() string
+}
+
+type PgConfig interface {
+	DSN() string
+}
+
+--- ./internal/config/env/pg.go ---
+package env
+
+import (
+	"errors"
+	"github.com/beachrockhotel/auth/internal/config"
+	"os"
+)
+
+var _ config.PgConfig = (*pgConfig)(nil)
+
+const (
+	dsnEnvName = "PG_DSN"
+)
+
+type pgConfig struct {
+	dsn string
+}
+
+func NewPGConfig() (*pgConfig, error) {
+	dsn := os.Getenv(dsnEnvName)
+	if len(dsn) == 0 {
+		return nil, errors.New("config env var " + dsnEnvName + " is not set")
+	}
+	return &pgConfig{dsn: dsn}, nil
+}
+
+func (cfg *pgConfig) DSN() string {
+	return cfg.dsn
+}
+
+--- ./internal/config/env/grpc.go ---
+package env
+
+import (
+	"errors"
+	"github.com/beachrockhotel/auth/internal/config"
+	"net"
+	"os"
+)
+
+var _ config.GRPCConfig = (*grpcConfig)(nil)
+
+const (
+	grpcHostEnvName = "GRPC_HOST"
+	grpcPortEnvName = "GRPC_PORT"
+)
+
+type grpcConfig struct {
+	host string
+	port string
+}
+
+func NewGRPCConfig() (*grpcConfig, error) {
+	host := os.Getenv(grpcHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("grpc host not found")
+	}
+	port := os.Getenv(grpcPortEnvName)
+	if len(port) == 0 {
+		errors.New("grpc port not found")
+	}
+
+	return &grpcConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *grpcConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+--- ./Dockerfile ---
+FROM golang:1.20.3-alpine AS builder
+
+COPY . /github.com/beachrockhotel/auth/source/
+WORKDIR /github.com/beachrockhotel/auth/source/
+
+RUN go mod download
+RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
+
+FROM alpine:latest
+
+WORKDIR /root/
+COPY --from=builder /github.com/beachrockhotel/auth/source/bin/crud_server .
+
+CMD ["./crud_server"]
+--- ./migration.sh ---
+#!/bin/bash
+source .env
+
+export MIGRATION_DSN="host=pg port=5432 dbname=$PG_DATABASE_NAME user=$PG_USER password=$PG_PASSWORD sslmode=disable"
+
+sleep 2 && goose -dir "${MIGRATION_DIR}" postgres "${MIGRATION_DSN}" up -v
+--- ./migrations/20250210214645_create_auth_table.sql ---
+-- +goose Up
+CREATE TABLE auth (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    role VARCHAR(50) DEFAULT 'USER',
+    password TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NULL DEFAULT NULL
+);
+-- +goose Down
+DROP TABLE auth;
+--- ./go.mod ---
+module github.com/beachrockhotel/auth
+
+go 1.23
+
+toolchain go1.23.8
+
+require (
+	github.com/Masterminds/squirrel v1.5.4
+	github.com/brianvoe/gofakeit v3.18.0+incompatible
+	github.com/golang/protobuf v1.5.4
+	github.com/jackc/pgx/v5 v5.7.4
+	github.com/joho/godotenv v1.5.1
+	google.golang.org/grpc v1.72.0
+	google.golang.org/protobuf v1.36.6
+)
+
+require (
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
+	github.com/jackc/puddle/v2 v2.2.2 // indirect
+	github.com/lann/builder v0.0.0-20180802200727-47ae307949d0 // indirect
+	github.com/lann/ps v0.0.0-20150810152359-62de8c46ede0 // indirect
+	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/net v0.35.0 // indirect
+	golang.org/x/sync v0.11.0 // indirect
+	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/text v0.22.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250218202821-56aae31c358a // indirect
+)
+
+--- ./api/auth_v1/auth.proto ---
+syntax = "proto3";
+
+package auth_v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+
+option go_package = "github.com/beachrockhotel/auth/pkg/auth_v1;auth_v1";
+
+service AuthV1 {
+  rpc Create(CreateRequest) returns (CreateResponse);
+  rpc Get(GetRequest) returns (GetResponse);
+  rpc Update(UpdateRequest) returns (google.protobuf.Empty);
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+message UserInfo {
+  string name = 1;
+  string email = 2;
+  Role role = 3;
+}
+
+message CreateRequest {
+  UserInfo info = 1;
+  string password = 3;
+  string password_confirm = 4;
+}
+
+message CreateResponse {
+  int64 id = 1;
+}
+
+message GetRequest {
+  int64 id = 1;
+}
+
+message GetResponse {
+  int64 id = 1;
+  UserInfo info = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+  string role_enum = 5; // добавлено строковое представление роли
+}
+
+message UpdateRequest {
+  int64 id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue email = 3;
+}
+
+message DeleteRequest {
+  int64 id = 1;
+}
+
+--- ./migration.Dockerfile ---
+FROM alpine:3.13
+
+RUN apk update && \
+    apk upgrade && \
+    apk add bash && \
+    rm -rf /var/cache/apk/*
+
+ADD https://github.com/pressly/goose/releases/download/v3.14.0/goose_linux_x86_64 /bin/goose
+RUN chmod +x /bin/goose
+
+WORKDIR /root
+
+ADD migrations/*.sql migrations/
+ADD migration.sh .
+ADD .env .
+
+RUN chmod +x migration.sh
+
+ENTRYPOINT ["bash", "migration.sh"]
+
+--- ./.env ---
+POSTGRES_DB=auth
+POSTGRES_USER=auth-user
+POSTGRES_PASSWORD=auth-password
+MIGRATION_DIR=./migrations
+
+PG_DSN="host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable"
+
+GRPC_HOST=localhost
+GRPC_PORT=50051
+--- ./cmd/grpc_server/main.go ---
+package main
+
+import (
+	"context"
+	"database/sql"
+	"flag"
+	"github.com/beachrockhotel/auth/internal/config"
+	"github.com/beachrockhotel/auth/internal/config/env"
+	"github.com/beachrockhotel/auth/internal/converter"
+	"github.com/beachrockhotel/auth/internal/service"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/brianvoe/gofakeit"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"log"
+	"net"
+	"strings"
+	"time"
+)
+
+type Server struct {
+	desc.UnimplementedAuthV1Server
+	authService service.AuthService
+}
+
+func toRoleEnum(roleStr string) desc.Role {
+	switch strings.ToUpper(roleStr) {
+	case "USER":
+		return desc.Role_USER
+	case "ADMIN":
+		return desc.Role_ADMIN
+	default:
+		return desc.Role_ROLE_UNSPECIFIED
+	}
+}
+
+func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
+	authObj, err := s.authService.Get(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("id: %d, name: %s, email: %s, role: %s, password: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info)
+
+	return &desc.GetResponse{
+		Auth: converter.ToAuthInfoFromService(authObj),
+	}, nil
+}
+
+func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	id, err := s.authService.Create(ctx, converter.ToAuthInfoFromDesc(req.GetInfo()))
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("inserted auth with id: %d", id)
+
+	return &desc.CreateResponse{
+		Id: id,
+	}, nil
+}
+
+func main() {
+	ctx := context.Background()
+
+	err := config.Load(".env")
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+
+	grpcConfig, err := config.NewGRPCConfig()
+	if err != nil {
+		log.Fatalf("failed to get grpc config: %v", err)
+	}
+
+	pgConfig, err := config.NewPGConfig()
+	if err != nil {
+		log.Fatalf("failed to get pg config: %v", err)
+	}
+
+	lis, err := net.Listen("tcp", grpcConfig.Address())
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	pool, err := pgxpool.Connect(ctx, pgConfig.DSN())
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	authRepo := authRepository.NewRepository(pool)
+	authSrv := authService.NewService(authRepo)
+
+	s := grpc.NewServer()
+	reflection.Register(s)
+	desc.RegisterAuthV1Server(s, &Server{pool: pgConfig})
+
+	log.Printf("server listening at %v", lis.Addr())
+
+	if err = s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+--- ./docker-compose.yaml ---
+version: "3"
+
+volumes:
+  postgres_volume:
+  postgres_volume_local:
+  postgres_volume_prod:
+
+services:
+  pg-local:
+    image: postgres:14-alpine3.17
+    env_file:
+      - .env
+    ports:
+      - "54323:5432"
+    volumes:
+      - postgres_volume_local:/var/lib/postgresql/data
+
+  migrator:
+    build:
+      context: .
+      dockerfile: migration.Dockerfile
+    restart: on-failure
+    environment:
+      DB_HOST: pg
