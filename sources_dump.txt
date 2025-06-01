@@ -143,17 +143,19 @@ func ToAuthFromService(auth *model.Auth) *desc.Auth {
 
 func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
 	return &desc.AuthInfo{
-		Name:  info.Name,
-		Email: info.Email,
-		Role:  info.Role,
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
 	}
 }
 
 func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
 	return &model.AuthInfo{
-		Name:  info.Name,
-		Email: info.Email,
-		Role:  info.Role,
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
 	}
 }
 
@@ -602,9 +604,10 @@ type Auth struct {
 }
 
 type AuthInfo struct {
-	Name  string
-	Email string
-	Role  auth_v1.Role
+	Name     string
+	Email    string
+	Role     auth_v1.Role
+	Password string
 }
 
 ==== ./internal/service/service.go ====
@@ -764,6 +767,7 @@ const (
 	nameColumn      = "name"
 	emailColumn     = "email"
 	roleColumn      = "role"
+	passwordColumn  = "password"
 	createdAtColumn = "created_at"
 	updatedAtColumn = "updated_at"
 )
@@ -779,8 +783,8 @@ func NewRepository(db db.Client) repository.AuthRepository {
 func (r *repo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
 	builder := sq.Insert(tableName).
 		PlaceholderFormat(sq.Dollar).
-		Columns(nameColumn, emailColumn, roleColumn).
-		Values(info.Name, info.Email, info.Role).
+		Columns(nameColumn, emailColumn, roleColumn, passwordColumn).
+		Values(info.Name, info.Email, info.Role, info.Password).
 		Suffix("RETURNING id")
 
 	query, args, err := builder.ToSql()
@@ -1250,7 +1254,7 @@ CREATE TABLE auth (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255),
     email VARCHAR(255),
-    role VARCHAR(50) DEFAULT 'USER',
+    role INTEGER DEFAULT 1,
     password TEXT NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMP NULL DEFAULT NULL
