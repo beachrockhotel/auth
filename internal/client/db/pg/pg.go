@@ -4,12 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 
-	"github.com/georgysavva/scany/pgxscan"
+	"github.com/georgysavva/scany/v2/pgxscan"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 
 	"github.com/beachrockhotel/auth/internal/client/db"
 	"github.com/beachrockhotel/auth/internal/client/db/prettier"

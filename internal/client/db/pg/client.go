@@ -2,8 +2,8 @@ package pg
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 
 	"github.com/beachrockhotel/auth/internal/client/db"

@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
 	"time"
 )
 
@@ -15,5 +16,5 @@ type Auth struct {
 type AuthInfo struct {
 	Name  string
 	Email string
-	Role  string
+	Role  auth_v1.Role
 }

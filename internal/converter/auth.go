@@ -25,7 +25,7 @@ func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
 	return &desc.AuthInfo{
 		Name:  info.Name,
 		Email: info.Email,
-		Role:  desc.Role(desc.Role_value[info.Role]),
+		Role:  info.Role,
 	}
 }
 
@@ -33,6 +33,6 @@ func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
 	return &model.AuthInfo{
 		Name:  info.Name,
 		Email: info.Email,
-		Role:  desc.Role(desc.Role_value[info.Role]),
+		Role:  info.Role,
 	}
 }

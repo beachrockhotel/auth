@@ -44,7 +44,6 @@ message GetResponse {
   AuthInfo info = 2;
   google.protobuf.Timestamp created_at = 3;
   google.protobuf.Timestamp updated_at = 4;
-  string role_enum = 5; // добавлено строковое представление роли
 }
 
 message UpdateRequest {

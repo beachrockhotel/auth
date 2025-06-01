@@ -252,7 +252,6 @@ import (
 	"context"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/jackc/pgx/v4"
 	"github.com/pkg/errors"
 
 	"github.com/beachrockhotel/auth/internal/client/db"
@@ -332,8 +331,8 @@ package pg
 
 import (
 	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pkg/errors"
 
 	"github.com/beachrockhotel/auth/internal/client/db"
@@ -373,12 +372,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"log"
 
 	"github.com/georgysavva/scany/pgxscan"
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
 
 	"github.com/beachrockhotel/auth/internal/client/db"
 	"github.com/beachrockhotel/auth/internal/client/db/prettier"
@@ -488,7 +486,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
 )
 
 // Handler - функция, которая выполняется в транзакции
@@ -589,10 +586,11 @@ package model
 
 import (
 	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
 	"time"
 )
 
-type User struct {
+type Auth struct {
 	ID        int64
 	Info      AuthInfo
 	CreatedAt time.Time
@@ -602,7 +600,7 @@ type User struct {
 type AuthInfo struct {
 	Name  string
 	Email string
-	Role  string
+	Role  auth_v1.Role
 }
 
 ==== ./internal/service/service.go ====
@@ -723,20 +721,21 @@ package model
 
 import (
 	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
 	"time"
 )
 
 type Auth struct {
-	ID         int64
-	Info       AuthInfo
-	created_at time.Time
-	updated_at sql.NullTime
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
 }
 
 type AuthInfo struct {
 	Name  string
 	Email string
-	Role  string
+	Role  auth_v1.Role
 }
 
 ==== ./internal/repository/auth/repository.go ====
@@ -857,30 +856,6 @@ func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.G
 	}
 
 	log.Printf("id: %d, name: %s, email: %s, role: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info.Name, authObj.Info.Email, authObj.Info.Role, authObj.CreatedAt, authObj.UpdatedAt)
-
-	return &desc.GetResponse{
-		Auth: converter.ToAuthFromService(authObj),
-	}, nil
-}
-
-==== ./internal/api/auth/service.go ====
-package auth
-
-import (
-	"context"
-	"log"
-
-	"github.com/beachrockhotel/auth/internal/converter"
-	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
-)
-
-func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
-	authObj, err := i.authService.Get(ctx, req.GetId())
-	if err != nil {
-		return nil, err
-	}
-
-	log.Printf("id: %d, title: %s, body: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info.Title, authObj.Info.Content, authObj.CreatedAt, authObj.UpdatedAt)
 
 	return &desc.GetResponse{
 		Auth: converter.ToAuthFromService(authObj),
@@ -1228,7 +1203,7 @@ func (cfg *grpcConfig) Address() string {
 FROM golang:1.20.3-alpine AS builder
 
 WORKDIR /app
-COPY . .
+COPY --from=builder /app/bin/crud_server .
 
 RUN go mod download
 RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
