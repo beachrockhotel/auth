@@ -3,8 +3,7 @@ package db
 import (
 	"context"
 	"github.com/jackc/pgx/v5"
-
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // Handler - функция, которая выполняется в транзакции
