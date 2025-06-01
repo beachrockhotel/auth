@@ -5,7 +5,6 @@ import (
 	"github.com/jackc/pgx/v5"
 
 	"github.com/jackc/pgconn"
-	"github.com/jackc/pgx/v4"
 )
 
 // Handler - функция, которая выполняется в транзакции

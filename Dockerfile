@@ -1,7 +1,7 @@
 FROM golang:1.20.3-alpine AS builder
 
-COPY . /github.com/beachrockhotel/auth/source/
-WORKDIR /github.com/beachrockhotel/auth/source/
+WORKDIR /app
+COPY --from=builder /app/bin/crud_server .
 
 RUN go mod download
 RUN go build -o ./bin/crud_server cmd/grpc_server/main.go

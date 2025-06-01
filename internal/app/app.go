@@ -9,9 +9,9 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
-	"github.combeachrockhotel/auth/internal/closer"
-	"github.combeachrockhotel/auth/internal/config"
-	desc "github.combeachrockhotel/auth/pkg/auth_v1"
+	"github.com/beachrockhotel/auth/internal/closer"
+	"github.com/beachrockhotel/auth/internal/config"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 )
 
 type App struct {
@@ -94,3 +94,4 @@ func (a *App) runGRPCServer() error {
 	}
 
 	return nil
+}

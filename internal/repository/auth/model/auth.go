@@ -6,10 +6,10 @@ import (
 )
 
 type Auth struct {
-	ID         int64
-	Info       AuthInfo
-	created_at time.Time
-	updated_at sql.NullTime
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
 }
 
 type AuthInfo struct {

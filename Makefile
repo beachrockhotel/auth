@@ -2,9 +2,6 @@ include .env
 
 LOCAL_BIN=$(CURDIR)/bin
 
-LOCAL_MIGRATION_DIR=$(MIGRATION_DIR)
-LOCAL_MIGRATION_DSN="host=localhost port=$(PG_PORT) dbname=$(PG_DATABASE_NAME) user=$(PG_USER) password=$(PG_PASSWORD) sslmode=disable"
-
 install-deps:
 	@GOBIN=$(LOCAL_BIN) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.1
 	@GOBIN=$(LOCAL_BIN) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
@@ -36,6 +33,10 @@ generate-auth-api:
 		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
 		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
 		api/auth_v1/auth.proto
+
+re-generate-auth-api:
+	@rm -f pkg/auth_v1/auth*.pb.go
+	@$(MAKE) generate-auth-api
 
 
 local-migration-status:
