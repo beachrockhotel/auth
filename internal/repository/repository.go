@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+
 	"github.com/beachrockhotel/auth/internal/model"
 )
 

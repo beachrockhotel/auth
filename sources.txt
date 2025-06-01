@@ -1065,21 +1065,19 @@ func ToAuthFromService(auth *model.Auth) *desc.GetResponse {
 	}
 }
 
-func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
-	return &desc.AuthInfo{
-		Name:     info.Name,
-		Email:    info.Email,
-		Role:     info.Role,
-		Password: info.Password,
+func ToUserInfoFromService(info model.UserInfo) *desc.UserInfo {
+	return &desc.UserInfo{
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  toRoleEnum(info.Role), // переводи строку обратно в enum
 	}
 }
 
-func ToAuthInfoFromDesc(info desc.AuthInfo) *model.AuthInfo {
-	return &desc.AuthInfo{
-		Name:     info.Name,
-		Email:    info.Email,
-		Role:     info.Role,
-		Password: info.Password,
+func ToUserInfoFromDesc(info *desc.UserInfo) *model.UserInfo {
+	return &model.UserInfo{
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  info.Role.String(),
 	}
 }
 
@@ -1091,14 +1089,14 @@ import (
 	"time"
 )
 
-type Auth struct {
+type User struct {
 	ID         int64
-	Info       AuthInfo
-	created_at time.Time
-	updated_at sql.NullTime
+	Info       UserInfo
+	Created_at time.Time
+	Updated_at sql.NullTime
 }
 
-type AuthInfo struct {
+type UserInfo struct {
 	Name     string
 	Email    string
 	Role     string
@@ -1114,12 +1112,12 @@ import (
 )
 
 type AuthService interface {
-	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Create(ctx context.Context, info *model.UserInfo) (int64, error)
 	Get(ctx context.Context, id int64) (*model.Auth, error)
 }
 
---- ./internal/service/note/get.go ---
-package note
+--- ./internal/service/auth/get.go ---
+package auth
 
 import (
 	"context"
@@ -1130,8 +1128,8 @@ func (s *serv) Get(ctx context.Context, id int64) (*model.Auth, error) {
 	return nil, nil
 }
 
---- ./internal/service/note/service.go ---
-package note
+--- ./internal/service/auth/service.go ---
+package auth
 
 import (
 	"github.com/beachrockhotel/auth/internal/repository"
@@ -1150,12 +1148,15 @@ func NewService(authRepository repository.AuthRepository) *serv {
 	}
 }
 
---- ./internal/service/note/create.go ---
-package note
+--- ./internal/service/auth/create.go ---
+package auth
 
-import "github.com/beachrockhotel/auth/internal/model"
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
 
-func (s *serv) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+func (s *serv) Create(ctx context.Context, info *model.UserInfo) (int64, error) {
 	id, err := s.authRepository.Create(ctx, info)
 	if err != nil {
 		return 0, err
@@ -1169,10 +1170,11 @@ package converter
 
 import (
 	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func ToNoteFromRepo(auth *model.Auth) *desc.Auth {
+func ToAuthFromRepo(auth *model.Auth) *desc.Auth {
 	var updatedAt *timestamppb.Timestamp
 	if auth.UpdatedAt.Valid {
 		updatedAt = timestamppb.New(auth.UpdatedAt.Time)
@@ -1180,18 +1182,18 @@ func ToNoteFromRepo(auth *model.Auth) *desc.Auth {
 
 	return &desc.Auth{
 		Id:        auth.ID,
-		Info:      ToAuthInfoFromRepo(auth.Info),
+		Info:      ToUserInfoFromRepo(auth.Info),
 		CreatedAt: timestamppb.New(auth.CreatedAt),
 		UpdatedAt: updatedAt,
 	}
 }
 
-func ToAuthInfoFromRepo(info *model.AuthInfo) *model.AuthInfo {
-	return &model.AuthInfo{
-		Name:     auth.Name,
-		Email:    auth.Email,
-		Role:     auth.Role,
-		Password: auth.Password,
+func ToUserInfoFromRepo(info *model.UserInfo) *model.UserInfo {
+	return &desc.UserInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
 	}
 }
 
@@ -1203,18 +1205,18 @@ import (
 	"time"
 )
 
-type Auth struct {
-	ID        int64 `db:"id"`
-	Info      *Info
-	CreatedAt time.Time    `db:"created_at"`
-	UpdatedAt sql.NullTime `db:"updated_at"`
+type User struct {
+	ID         int64
+	Info       UserInfo
+	created_at time.Time
+	updated_at sql.NullTime
 }
 
-type Info struct {
-	Name     string `db:"name"`
-	Email    string `db:"email"`
-	Role     string `db:"role"`
-	Password string `db:"password"`
+type UserInfo struct {
+	Name     string
+	Email    string
+	Role     string
+	Password string
 }
 
 --- ./internal/repository/auth/repository.go ---
@@ -1255,7 +1257,7 @@ func NewRepository(db *pgxpool.Pool) *repo {
 	return &repo{db: db}
 }
 
-func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error) {
+func (r *repo) Get(ctx context.Context, id int64) (*model.User, error) {
 	builder := (sq.Select(idColumn, nameColumn, emailColumn, roleColumn, passwordColumn, createdAtColumn, updatedAtColumn).
 		From(tableName).
 		Where(sq.Eq{idColumn: id}).
@@ -1304,7 +1306,7 @@ import (
 )
 
 type AuthRepository interface {
-	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Create(ctx context.Context, info *model.UserInfo) (int64, error)
 	Get(ctx context.Context, id int64) (*model.Auth, error)
 }
 
@@ -1611,13 +1613,11 @@ func (s *Server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetRespon
 
 	log.Printf("id: %d, name: %s, email: %s, role: %s, password: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info)
 
-	return &desc.GetResponse{
-		Auth: converter.ToAuthInfoFromService(authObj),
-	}, nil
+	return converter.ToAuthFromService(authObj), nil
 }
 
 func (s *Server) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
-	id, err := s.authService.Create(ctx, converter.ToAuthInfoFromDesc(req.GetInfo()))
+	id, err := s.authService.Create(ctx, converter.ToUserInfoFromDesc(req.GetInfo()))
 	if err != nil {
 		return nil, err
 	}
@@ -1663,7 +1663,7 @@ func main() {
 
 	s := grpc.NewServer()
 	reflection.Register(s)
-	desc.RegisterAuthV1Server(s, &Server{pool: pgConfig})
+	desc.RegisterAuthV1Server(s, &Server{authService: authSrv})
 
 	log.Printf("server listening at %v", lis.Addr())
 

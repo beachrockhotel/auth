@@ -2,17 +2,14 @@ package auth
 
 import (
 	"context"
-	"log"
-	"time"
 
-	"github.com/Masterminds/squirrel"
-	"github.com/beachrockhotel/auth/internal/repository/auth/model"
-	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
-	"github.com/brianvoe/gofakeit"
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	sq "github.com/Masterminds/squirrel"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/repository"
+	"github.com/beachrockhotel/auth/internal/repository/auth/converter"
+	modelRepo "github.com/beachrockhotel/auth/internal/repository/auth/model"
 )
 
 const (
@@ -22,21 +19,47 @@ const (
 	nameColumn      = "name"
 	emailColumn     = "email"
 	roleColumn      = "role"
-	passwordColumn  = "password"
 	createdAtColumn = "created_at"
 	updatedAtColumn = "updated_at"
 )
 
 type repo struct {
-	db *pgxpool.Pool
+	db db.Client
 }
 
-func NewRepository(db *pgxpool.Pool) *repo {
+func NewRepository(db db.Client) repository.AuthRepository {
 	return &repo{db: db}
 }
 
-func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error) {
-	builder := (sq.Select(idColumn, nameColumn, emailColumn, roleColumn, passwordColumn, createdAtColumn, updatedAtColumn).
+func (r *repo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	builder := sq.Insert(tableName).
+		PlaceholderFormat(sq.Dollar).
+		Columns(nameColumn, emailColumn, roleColumn).
+		Values(info.Name, info.Email, info.Role).
+		Suffix("RETURNING id")
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return 0, err
+	}
+
+	q := db.Query{
+		Name:     "auth_repository.Create",
+		QueryRaw: query,
+	}
+
+	var id int64
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+func (r *repo) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	builder := sq.Select(idColumn, nameColumn, emailColumn, roleColumn, createdAtColumn, updatedAtColumn).
+		PlaceholderFormat(sq.Dollar).
 		From(tableName).
 		Where(sq.Eq{idColumn: id}).
 		Limit(1)
@@ -46,31 +69,16 @@ func (r *repo) Get(ctx context.Context, req *desc.GetRequest) (model.User, error
 		return nil, err
 	}
 
-	var auth model.Auth
-	err = r.db.QueryRow(ctx, query, args...).Scan(&auth.ID, &auth.Info.Name, &auth.Info.Email, &auth.Info.Role, &auth.Info.Password, &auth.Info.CreatedAt, &auth.Info.UpdatedAt)
+	q := db.Query{
+		Name:     "auth_repository.Get",
+		QueryRaw: query,
+	}
+
+	var auth modelRepo.Auth
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&auth.ID, &auth.Info.Name, &auth.Info.Email, &auth.Info.Role, &auth.CreatedAt, &auth.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 
-	return converter.ToAuthFromRepo(auth), nil
-}
-
-func (r *repo) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
-	builder := (sq.Insert(tableName).
-		Columns(nameColumn, emailColumn, roleColumn, passwordColumn).
-		Values(info.Name, info.Email, info.Role, info.Password).
-		Suffix("RETURNING id")
-
-	query, args, err := builder.ToSQL()
-	if err != nil {
-		return nil, err
-	}
-
-	var id int64
-	err = r.db.QueryRow(ctx, query, args...).Scan(&id)
-	if err != nil {
-		return 0, err
-	}
-
-	return id, nil
+	return converter.ToAuthFromRepo(&auth), nil
 }

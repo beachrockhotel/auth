@@ -5,16 +5,15 @@ import (
 	"time"
 )
 
-type Auth struct {
+type User struct {
 	ID         int64
 	Info       AuthInfo
-	created_at time.Time
-	updated_at sql.NullTime
+	Created_at time.Time
+	Updated_at sql.NullTime
 }
 
 type AuthInfo struct {
-	Name     string
-	Email    string
-	Role     string
-	Password string
+	Name  string
+	Email string
+	Role  string
 }
