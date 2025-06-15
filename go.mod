@@ -1,8 +1,6 @@
 module github.com/beachrockhotel/auth
 
-go 1.23
-
-toolchain go1.23.8
+go 1.24
 
 require (
 	github.com/Masterminds/squirrel v1.5.4
