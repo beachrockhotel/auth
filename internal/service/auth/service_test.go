@@ -4,14 +4,13 @@ import (
 	"context"
 	"testing"
 
-	"github.com/beachrockhotel/auth/internal/client/db" // Вот тут ты импортируешь db!
+	"github.com/beachrockhotel/auth/internal/client/db"
 	"github.com/beachrockhotel/auth/internal/model"
 	"github.com/beachrockhotel/auth/internal/service/auth"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
 
-// Твой мок репозитория
 type mockRepo struct {
 	mock.Mock
 }
@@ -26,7 +25,6 @@ func (m *mockRepo) Get(ctx context.Context, id int64) (*model.Auth, error) {
 	return args.Get(0).(*model.Auth), args.Error(1)
 }
 
-// ✅ Исправленный мок TxManager — именно здесь нужен твой метод ReadCommitted
 type mockTx struct {
 	mock.Mock
 }

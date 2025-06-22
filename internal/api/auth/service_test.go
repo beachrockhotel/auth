@@ -16,7 +16,6 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-// 1) Мок сервиса
 type mockAuthService struct {
 	mock.Mock
 }
