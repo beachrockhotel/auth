@@ -14,6 +14,7 @@ import (
 	"github.com/beachrockhotel/auth/internal/closer"
 	"github.com/beachrockhotel/auth/internal/config"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 )
 
 type App struct {
@@ -96,7 +97,7 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 }
 
 func (a *App) initHTTPServer(ctx context.Context) error {
-	mux := http.NewServeMux()
+	mux := runtime.NewServeMux()
 
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
