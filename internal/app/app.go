@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"net"
+	"net/http"
+	"sync"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -11,32 +13,43 @@ import (
 
 	"github.com/beachrockhotel/auth/internal/closer"
 	"github.com/beachrockhotel/auth/internal/config"
+	"github.com/beachrockhotel/auth/internal/http"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 )
 
 type App struct {
 	serviceProvider *serviceProvider
 	grpcServer      *grpc.Server
+	httpServer      *http.Server
 }
 
 func NewApp(ctx context.Context) (*App, error) {
-	a := &App{}
-
-	err := a.initDeps(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return a, nil
-}
-
-func (a *App) Run() error {
 	defer func() {
 		closer.CloseAll()
 		closer.Wait()
 	}()
 
-	return a.runGRPCServer()
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+
+		err := a.runGRPCServer()
+		if err != nil {
+			log.Fatal("failed to run GRPC server: #{err}")
+		}
+	}()
+	go func() {
+		defer wg.Done()
+
+		err := a.runHTTPServer()
+		if err != nil {
+			log.Fatal("failed to run HTTP server: #{err}")
+		}
+	}()
+	wg.Wait()
+	return nil
 }
 
 func (a *App) initDeps(ctx context.Context) error {
@@ -44,6 +57,7 @@ func (a *App) initDeps(ctx context.Context) error {
 		a.initConfig,
 		a.initServiceProvider,
 		a.initGRPCServer,
+		a.initHTTPServer,
 	}
 
 	for _, f := range inits {
@@ -80,6 +94,27 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 	return nil
 }
 
+func (a *App) initHTTPServer(ctx context.Context) error {
+	mux := http.NewServeMux()
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+
+	err := desc.RegisterAuthV1HandlerFromEndpoint(ctx, mux, a.serviceProvider.GRPCConfig().Address(), opts)
+	if err != nil {
+		return err
+	}
+
+	a.httpServer = &http.Server{
+		Addr:    a.serviceProvider.HTTPConfig().Address(),
+		Handler: mux,
+	}
+
+	return nil
+
+}
+
 func (a *App) runGRPCServer() error {
 	log.Printf("GRPC server is running on %s", a.serviceProvider.GRPCConfig().Address())
 
@@ -94,4 +129,16 @@ func (a *App) runGRPCServer() error {
 	}
 
 	return nil
+}
+
+func (a *App) runHTTPServer() error {
+	log.Printf("HTTP server is running on #{a.serviceProvider.HTTPConfig().Address()}")
+
+	err := a.httpServer.ListenAndServe()
+	if err != nil {
+		return err
+	}
+
+	return nil
+
 }
