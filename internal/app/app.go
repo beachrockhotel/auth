@@ -13,7 +13,6 @@ import (
 
 	"github.com/beachrockhotel/auth/internal/closer"
 	"github.com/beachrockhotel/auth/internal/config"
-	"github.com/beachrockhotel/auth/internal/http"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 )
 
@@ -23,7 +22,19 @@ type App struct {
 	httpServer      *http.Server
 }
 
+// NewApp создаёт и инициализирует все зависимости
 func NewApp(ctx context.Context) (*App, error) {
+	a := &App{}
+
+	if err := a.initDeps(ctx); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+// Run запускает GRPC и HTTP серверы параллельно
+func (a *App) Run() error {
 	defer func() {
 		closer.CloseAll()
 		closer.Wait()
@@ -34,24 +45,23 @@ func NewApp(ctx context.Context) (*App, error) {
 
 	go func() {
 		defer wg.Done()
-
-		err := a.runGRPCServer()
-		if err != nil {
-			log.Fatal("failed to run GRPC server: #{err}")
+		if err := a.runGRPCServer(); err != nil {
+			log.Fatalf("failed to run GRPC server: %v", err)
 		}
 	}()
+
 	go func() {
 		defer wg.Done()
-
-		err := a.runHTTPServer()
-		if err != nil {
-			log.Fatal("failed to run HTTP server: #{err}")
+		if err := a.runHTTPServer(); err != nil {
+			log.Fatalf("failed to run HTTP server: %v", err)
 		}
 	}()
+
 	wg.Wait()
 	return nil
 }
 
+// initDeps инициализирует все зависимости по порядку
 func (a *App) initDeps(ctx context.Context) error {
 	inits := []func(context.Context) error{
 		a.initConfig,
@@ -61,8 +71,7 @@ func (a *App) initDeps(ctx context.Context) error {
 	}
 
 	for _, f := range inits {
-		err := f(ctx)
-		if err != nil {
+		if err := f(ctx); err != nil {
 			return err
 		}
 	}
@@ -71,12 +80,7 @@ func (a *App) initDeps(ctx context.Context) error {
 }
 
 func (a *App) initConfig(_ context.Context) error {
-	err := config.Load(".env")
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return config.Load(".env")
 }
 
 func (a *App) initServiceProvider(_ context.Context) error {
@@ -86,11 +90,8 @@ func (a *App) initServiceProvider(_ context.Context) error {
 
 func (a *App) initGRPCServer(ctx context.Context) error {
 	a.grpcServer = grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
-
 	reflection.Register(a.grpcServer)
-
 	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
-
 	return nil
 }
 
@@ -101,7 +102,12 @@ func (a *App) initHTTPServer(ctx context.Context) error {
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	}
 
-	err := desc.RegisterAuthV1HandlerFromEndpoint(ctx, mux, a.serviceProvider.GRPCConfig().Address(), opts)
+	err := desc.RegisterAuthV1HandlerFromEndpoint(
+		ctx,
+		mux,
+		a.serviceProvider.GRPCConfig().Address(),
+		opts,
+	)
 	if err != nil {
 		return err
 	}
@@ -112,33 +118,23 @@ func (a *App) initHTTPServer(ctx context.Context) error {
 	}
 
 	return nil
-
 }
 
 func (a *App) runGRPCServer() error {
-	log.Printf("GRPC server is running on %s", a.serviceProvider.GRPCConfig().Address())
+	addr := a.serviceProvider.GRPCConfig().Address()
+	log.Printf("GRPC server is running on %s", addr)
 
-	list, err := net.Listen("tcp", a.serviceProvider.GRPCConfig().Address())
+	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	err = a.grpcServer.Serve(list)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return a.grpcServer.Serve(listener)
 }
 
 func (a *App) runHTTPServer() error {
-	log.Printf("HTTP server is running on #{a.serviceProvider.HTTPConfig().Address()}")
+	addr := a.serviceProvider.HTTPConfig().Address()
+	log.Printf("HTTP server is running on %s", addr)
 
-	err := a.httpServer.ListenAndServe()
-	if err != nil {
-		return err
-	}
-
-	return nil
-
+	return a.httpServer.ListenAndServe()
 }
