@@ -7,6 +7,7 @@ install-deps:
 	@GOBIN=$(LOCAL_BIN) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
 	@GOBIN=$(LOCAL_BIN) go install github.com/pressly/goose/v3/cmd/goose@v3.14.0
 	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.15.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/envoyproxy/protoc-gen-validate@latest
 
 get-deps:
 	@go get -u google.golang.org/protobuf/cmd/protoc-gen-go
@@ -28,13 +29,15 @@ docker-build-and-push:
 
 generate-auth-api:
 	@mkdir -p pkg/auth_v1
-	@PATH=$(LOCAL_BIN):$$PATH \
-	protoc \
-		--proto_path=api/auth_v1 \
+	protoc --proto_path=api/auth_v1 --proto_path=vendor.protogen \
 		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
+		--plugin=protoc-gen-go=bin/protoc-gen-go \
 		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
-		--grpc-gateway_out=pkg/auth_v1 --grpc-gateway_opt=paths=source_relative \
-		--plugin=protoc-gen-grpc-gateway=bin/protoc-gen-grpc/gateway\
+		--plugin=protoc-gen-go-grpc=bin/protoc-gen-go-grpc \
+		--validate_out=lang=go:pkg/auth_v1 --validate_opt=paths=source_relative \
+		--plugin=protoc-gen-validate=bin/protoc-gen-validate \
+		--grpc_gateway_out=pkg/auth_v1 --grpc_gateway_opt=paths=source_relative \
+		--plugin=protoc-gen-grpc_gateway=bin/protoc-gen-grpc-gateway \
 		api/auth_v1/auth.proto
 
 re-generate-auth-api:
