@@ -3,8 +3,6 @@ package app
 import (
 	"context"
 	"io"
-	"io/fs"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -20,6 +18,7 @@ import (
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 	_ "github.com/beachrockhotel/auth/statik"
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rakyll/statik/fs"
 )
 
 type App struct {
@@ -138,7 +137,7 @@ func (a *App) initHTTPServer(ctx context.Context) error {
 
 	a.httpServer = &http.Server{
 		Addr:    a.serviceProvider.HTTPConfig().Address(),
-		Handler: mux,
+		Handler: corsMiddleware.Handler(mux),
 	}
 
 	return nil
