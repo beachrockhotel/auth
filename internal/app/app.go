@@ -190,39 +190,38 @@ func (a *App) runSwaggerServer() error {
 
 func serveSwaggerFile(path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("serving swagger file %s", path)
+		log.Printf("Serving swagger file: %s", path)
 
 		statikFs, err := fs.New()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error creating statik FS: %v", err)
 			return
 		}
-
-		log.Printf("Open swagger file: #{path}")
 
 		file, err := statikFs.Open(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error opening swagger file: %v", err)
 			return
 		}
 		defer file.Close()
 
-		log.Printf("Read swagger file: #{path}")
-
 		content, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error reading swagger file: %v", err)
 			return
 		}
 
-		log.Printf("Write swagger file: #{path}")
 		w.Header().Set("Content-Type", "application/json")
 		_, err = w.Write(content)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error writing swagger file: %v", err)
 			return
 		}
 
-		log.Printf("Served swagger file: #{path")
+		log.Printf("Successfully served swagger file: %s", path)
 	}
 }
