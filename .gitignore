@@ -2,4 +2,3 @@
 bin/
 pkg/
 vendor.protogen/
-statik/

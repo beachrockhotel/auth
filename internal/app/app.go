@@ -17,6 +17,7 @@ import (
 	"github.com/beachrockhotel/auth/internal/config"
 	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
 	_ "github.com/beachrockhotel/auth/statik"
+
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rakyll/statik/fs"
 )
