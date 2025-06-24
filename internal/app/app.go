@@ -10,7 +10,6 @@ import (
 
 	"github.com/rs/cors"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 
 	"github.com/beachrockhotel/auth/internal/closer"
@@ -20,6 +19,9 @@ import (
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"github.com/rakyll/statik/fs"
+
+	"crypto/tls"
+	"google.golang.org/grpc/credentials"
 )
 
 type App struct {
@@ -106,7 +108,16 @@ func (a *App) initServiceProvider(_ context.Context) error {
 }
 
 func (a *App) initGRPCServer(ctx context.Context) error {
-	a.grpcServer = grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	cert, err := tls.LoadX509KeyPair("service.pem", "service.key")
+	if err != nil {
+		return err
+	}
+
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+	})
+
+	a.grpcServer = grpc.NewServer(grpc.Creds(creds))
 	reflection.Register(a.grpcServer)
 	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
 	return nil
@@ -115,8 +126,12 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 func (a *App) initHTTPServer(ctx context.Context) error {
 	mux := runtime.NewServeMux()
 
+	creds := credentials.NewTLS(&tls.Config{
+		InsecureSkipVerify: true, // на dev можно так, на prod надо валидный cert
+	})
+
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithTransportCredentials(creds), // ✅ используем TLS
 	}
 
 	err := desc.RegisterAuthV1HandlerFromEndpoint(
@@ -179,6 +194,7 @@ func (a *App) runHTTPServer() error {
 	log.Printf("HTTP server is running on %s", addr)
 
 	return a.httpServer.ListenAndServe()
+
 }
 
 func (a *App) runSwaggerServer() error {

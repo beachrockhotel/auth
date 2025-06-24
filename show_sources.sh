@@ -6,7 +6,7 @@ OUTPUT_FILE="sources_dump.txt"
 
 # Каталоги и шаблоны, которые надо исключить
 EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik")
-EXCLUDE_FILES=("go.mod" "go.sum")
+EXCLUDE_FILES=("go.mod" "go.sum" "service.csr" "service.key" "service.pem" "ca.cert" "ca.key" "ca.srl")
 EXCLUDE_PATTERNS=("*.pb.go" "*.pb" "*.exe" "*.so" "*.out" "*.a")
 
 # Проверка: исключить ли файл по имени

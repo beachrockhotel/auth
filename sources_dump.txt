@@ -7,7 +7,7 @@ OUTPUT_FILE="sources_dump.txt"
 
 # Каталоги и шаблоны, которые надо исключить
 EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik")
-EXCLUDE_FILES=("go.mod" "go.sum")
+EXCLUDE_FILES=("go.mod" "go.sum" "service.csr" "service.key" "service.pem" "ca.cert" "ca.key" "ca.srl")
 EXCLUDE_PATTERNS=("*.pb.go" "*.pb" "*.exe" "*.so" "*.out" "*.a")
 
 # Проверка: исключить ли файл по имени
@@ -78,7 +78,6 @@ install-deps:
 	@GOBIN=$(LOCAL_BIN) go install github.com/envoyproxy/protoc-gen-validate@latest
 	@GOBIN=$(LOCAL_BIN) go install github.com/rakyll/statik@latest
 
-
 get-deps:
 	@go get -u google.golang.org/protobuf/cmd/protoc-gen-go
 	@go get -u google.golang.org/grpc/cmd/protoc-gen-go-grpc
@@ -86,10 +85,39 @@ get-deps:
 build:
 	GOOS=linux GOARCH=amd64 go build -o service_linux cmd/grpc_server/main.go
 
-generate:
-	make generate-auth-api
-	mkdir -p pkg/swagger
-	@$(LOCAL_BIN)/statik -src=pkg/swagger/ -include='*.css,*.html,*.js,*.json,*.png'
+generate: generate-auth-api
+
+generate-auth-api:
+	@mkdir -p pkg/auth_v1
+	protoc --proto_path=api/auth_v1 --proto_path=vendor.protogen \
+		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
+		--plugin=protoc-gen-go=$(LOCAL_BIN)/protoc-gen-go \
+		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
+		--plugin=protoc-gen-go-grpc=$(LOCAL_BIN)/protoc-gen-go-grpc \
+		--validate_out=lang=go:pkg/auth_v1 --validate_opt=paths=source_relative \
+		--plugin=protoc-gen-validate=$(LOCAL_BIN)/protoc-gen-validate \
+		--grpc_gateway_out=pkg/auth_v1 --grpc_gateway_opt=paths=source_relative \
+		--plugin=protoc-gen-grpc_gateway=$(LOCAL_BIN)/protoc-gen-grpc-gateway \
+		--openapiv2_out=allow_merge=true,merge_file_name=api:pkg/swagger \
+		--plugin=protoc-gen-openapiv2=$(LOCAL_BIN)/protoc-gen-openapiv2 \
+		api/auth_v1/auth.proto
+	@test -f pkg/swagger/api.swagger.json || (echo "Swagger JSON not found!"; exit 1)
+	@$(MAKE) generate-statik
+
+gen-cert:
+	openssl genrsa -out ca.key 4096
+	openssl req -new -x509 -key ca.key -sha256 -subj "/C=US/ST=NJ/O=CA, Inc." -days 365 -out ca.cert
+	openssl genrsa -out service.key 4096
+	openssl req -new -key service.key -out service.csr -config certificate.conf
+	openssl x509 -req -in service.csr -CA ca.cert -CAkey ca.key -CAcreateserial \
+    		-out service.pem -days 365 -sha256 -extfile certificate.conf -extensions req_ext
+
+generate-statik:
+	@$(LOCAL_BIN)/statik -src=pkg/swagger/ -include='*.css,*.html,*.js,*.json,*.png' -f -p statik
+
+re-generate-auth-api:
+	@rm -f pkg/auth_v1/auth*.pb.go
+	@$(MAKE) generate-auth-api
 
 copy-to-server:
 	scp service_linux root@109.71.15.36:
@@ -99,34 +127,14 @@ docker-build-and-push:
 	docker login -u token -p CRgAAAAAkL-JL7tX1UmJizGV3dsIj9cYqY7Y0WEq cr.selcloud.ru/beachrockhotel
 	docker push cr.selcloud.ru/beachrockhotel/test-server:v0.0.1
 
-generate-auth-api:
-	@mkdir -p pkg/auth_v1
-	protoc --proto_path=api/auth_v1 --proto_path=vendor.protogen \
-		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
-		--plugin=protoc-gen-go=bin/protoc-gen-go \
-		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
-		--plugin=protoc-gen-go-grpc=bin/protoc-gen-go-grpc \
-		--validate_out=lang=go:pkg/auth_v1 --validate_opt=paths=source_relative \
-		--plugin=protoc-gen-validate=bin/protoc-gen-validate \
-		--grpc_gateway_out=pkg/auth_v1 --grpc_gateway_opt=paths=source_relative \
-		--plugin=protoc-gen-grpc_gateway=bin/protoc-gen-grpc-gateway \
-		--openapiv2_out=allow_merge=true,merge_file_name=api:pkg/swagger \
-		--plugin=protoc-gen-openapiv2=bin/protoc-gen-openapiv2 \
-		api/auth_v1/auth.proto
-
-re-generate-auth-api:
-	@rm -f pkg/auth_v1/auth*.pb.go
-	@$(MAKE) generate-auth-api
-
-
 local-migration-status:
-	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} status -v
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" status -v
 
 local-migration-up:
 	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" up -v
 
 local-migration-down:
-	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} down -v
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" down -v
 
 vendor-proto:
 	@if [ ! -d vendor.protogen/validate ]; then \
@@ -142,6 +150,7 @@ vendor-proto:
 		mv vendor.protogen/googleapis/google/api vendor.protogen/google && \
 		rm -rf vendor.protogen/googleapis ; \
 	fi
+
 	@if [ ! -d vendor.protogen/protoc-gen-openapiv2 ]; then \
 		mkdir -p vendor.protogen/protoc-gen-openapiv2/options &&\
 		git clone https://github.com/grpc-ecosystem/grpc-gateway vendor.protogen/openapiv2 &&\
@@ -2886,7 +2895,7 @@ func (a *App) initSwaggerServer(_ context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.StripPrefix("/", http.FileServer(statikFs)))
-	mux.HandleFunc("/api.swagger.json", serveSwaggerFile("api.swagger.json"))
+	mux.HandleFunc("/api.swagger.json", serveSwaggerFile(statikFs, "/api.swagger.json"))
 
 	a.swaggerServer = &http.Server{
 		Addr:    a.serviceProvider.SwaggerConfig().Address(),
@@ -2922,18 +2931,11 @@ func (a *App) runSwaggerServer() error {
 	return a.swaggerServer.ListenAndServe()
 }
 
-func serveSwaggerFile(path string) http.HandlerFunc {
+func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Serving swagger file: %s", path)
 
-		statikFs, err := fs.New()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error creating statik FS: %v", err)
-			return
-		}
-
-		file, err := statikFs.Open(path)
+		file, err := fs.Open(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Printf("Error opening swagger file: %v", err)
@@ -3388,7 +3390,7 @@ GRPC_HOST=localhost
 GRPC_PORT=50051
 
 HTTP_HOST=localhost
-HTTP_PORT=8081
+HTTP_PORT=8080
 
 SWAGGER_HOST=localhost
 SWAGGER_PORT=8090
