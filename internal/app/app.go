@@ -152,7 +152,7 @@ func (a *App) initSwaggerServer(_ context.Context) error {
 
 	mux := http.NewServeMux()
 	mux.Handle("/", http.StripPrefix("/", http.FileServer(statikFs)))
-	mux.HandleFunc("/api.swagger.json", serveSwaggerFile("api.swagger.json"))
+	mux.HandleFunc("/api.swagger.json", serveSwaggerFile(statikFs, "/api.swagger.json"))
 
 	a.swaggerServer = &http.Server{
 		Addr:    a.serviceProvider.SwaggerConfig().Address(),
@@ -188,18 +188,11 @@ func (a *App) runSwaggerServer() error {
 	return a.swaggerServer.ListenAndServe()
 }
 
-func serveSwaggerFile(path string) http.HandlerFunc {
+func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Serving swagger file: %s", path)
 
-		statikFs, err := fs.New()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error creating statik FS: %v", err)
-			return
-		}
-
-		file, err := statikFs.Open(path)
+		file, err := fs.Open(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			log.Printf("Error opening swagger file: %v", err)

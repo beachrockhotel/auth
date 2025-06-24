@@ -1,0 +1,3433 @@
+==== ./show_sources.sh ====
+#!/bin/bash
+
+# Выходной файл
+OUTPUT_FILE="sources_dump.txt"
+> "$OUTPUT_FILE"  # Очистить файл перед началом
+
+# Каталоги и шаблоны, которые надо исключить
+EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik")
+EXCLUDE_FILES=("go.mod" "go.sum")
+EXCLUDE_PATTERNS=("*.pb.go" "*.pb" "*.exe" "*.so" "*.out" "*.a")
+
+# Проверка: исключить ли файл по имени
+should_exclude_file() {
+    local filename="$1"
+
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        if [[ "$filename" == $pattern ]]; then
+            return 0
+        fi
+    done
+
+    for f in "${EXCLUDE_FILES[@]}"; do
+        if [[ "$(basename "$filename")" == "$f" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Основной проход по всем файлам
+find . -type f | while read -r file; do
+    # Пропуск исключённых директорий
+    skip_file=0
+    for dir in "${EXCLUDE_DIRS[@]}"; do
+        if [[ "$file" == ./$dir/* ]]; then
+            skip_file=1
+            break
+        fi
+    done
+
+    if [ "$skip_file" -eq 1 ]; then
+        continue
+    fi
+
+    # Пропуск по расширению или имени
+    if should_exclude_file "$file"; then
+        continue
+    fi
+
+    # Убедиться, что это текстовый файл
+    if file "$file" | grep -qvE 'text|ASCII'; then
+        continue
+    fi
+
+    # Запись пути и содержимого в файл
+    {
+        echo "==== $file ===="
+        cat "$file"
+        echo
+    } >> "$OUTPUT_FILE"
+done
+
+echo "Содержимое сохранено в $OUTPUT_FILE"
+
+==== ./Makefile ====
+include .env
+
+LOCAL_BIN=$(CURDIR)/bin
+
+install-deps:
+	@GOBIN=$(LOCAL_BIN) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.1
+	@GOBIN=$(LOCAL_BIN) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/pressly/goose/v3/cmd/goose@v3.14.0
+	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.15.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.15.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/envoyproxy/protoc-gen-validate@latest
+	@GOBIN=$(LOCAL_BIN) go install github.com/rakyll/statik@latest
+
+
+get-deps:
+	@go get -u google.golang.org/protobuf/cmd/protoc-gen-go
+	@go get -u google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
+build:
+	GOOS=linux GOARCH=amd64 go build -o service_linux cmd/grpc_server/main.go
+
+generate:
+	make generate-auth-api
+	mkdir -p pkg/swagger
+	@$(LOCAL_BIN)/statik -src=pkg/swagger/ -include='*.css,*.html,*.js,*.json,*.png'
+
+copy-to-server:
+	scp service_linux root@109.71.15.36:
+
+docker-build-and-push:
+	docker buildx build --no-cache --platform linux/amd64 -t cr.selcloud.ru/beachrockhotel/test-server:v0.0.1 .
+	docker login -u token -p CRgAAAAAkL-JL7tX1UmJizGV3dsIj9cYqY7Y0WEq cr.selcloud.ru/beachrockhotel
+	docker push cr.selcloud.ru/beachrockhotel/test-server:v0.0.1
+
+generate-auth-api:
+	@mkdir -p pkg/auth_v1
+	protoc --proto_path=api/auth_v1 --proto_path=vendor.protogen \
+		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
+		--plugin=protoc-gen-go=bin/protoc-gen-go \
+		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
+		--plugin=protoc-gen-go-grpc=bin/protoc-gen-go-grpc \
+		--validate_out=lang=go:pkg/auth_v1 --validate_opt=paths=source_relative \
+		--plugin=protoc-gen-validate=bin/protoc-gen-validate \
+		--grpc_gateway_out=pkg/auth_v1 --grpc_gateway_opt=paths=source_relative \
+		--plugin=protoc-gen-grpc_gateway=bin/protoc-gen-grpc-gateway \
+		--openapiv2_out=allow_merge=true,merge_file_name=api:pkg/swagger \
+		--plugin=protoc-gen-openapiv2=bin/protoc-gen-openapiv2 \
+		api/auth_v1/auth.proto
+
+re-generate-auth-api:
+	@rm -f pkg/auth_v1/auth*.pb.go
+	@$(MAKE) generate-auth-api
+
+
+local-migration-status:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} status -v
+
+local-migration-up:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" up -v
+
+local-migration-down:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres ${LOCAL_MIGRATION_DSN} down -v
+
+vendor-proto:
+	@if [ ! -d vendor.protogen/validate ]; then \
+		mkdir -p vendor.protogen/validate && \
+		git clone https://github.com/envoyproxy/protoc-gen-validate vendor.protogen/protoc-gen-validate && \
+		mv vendor.protogen/protoc-gen-validate/validate/*.proto vendor.protogen/validate && \
+		rm -rf vendor.protogen/protoc-gen-validate ; \
+	fi
+
+	@if [ ! -d vendor.protogen/google ]; then \
+		git clone https://github.com/googleapis/googleapis vendor.protogen/googleapis && \
+		mkdir -p vendor.protogen/google && \
+		mv vendor.protogen/googleapis/google/api vendor.protogen/google && \
+		rm -rf vendor.protogen/googleapis ; \
+	fi
+	@if [ ! -d vendor.protogen/protoc-gen-openapiv2 ]; then \
+		mkdir -p vendor.protogen/protoc-gen-openapiv2/options &&\
+		git clone https://github.com/grpc-ecosystem/grpc-gateway vendor.protogen/openapiv2 &&\
+		mv vendor.protogen/openapiv2/protoc-gen-openapiv2/options/*.proto vendor.protogen/protoc-gen-openapiv2/options &&\
+		rm -rf vendor.protogen/openapiv2 ;\
+	fi
+
+==== ./.gitignore ====
+.idea
+bin/
+pkg/
+vendor.protogen/
+==== ./pkg/auth_v1/auth.pb.validate.go ====
+// Code generated by protoc-gen-validate. DO NOT EDIT.
+// source: auth.proto
+
+package auth_v1
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"net"
+	"net/mail"
+	"net/url"
+	"regexp"
+	"sort"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"google.golang.org/protobuf/types/known/anypb"
+)
+
+// ensure the imports are used
+var (
+	_ = bytes.MinRead
+	_ = errors.New("")
+	_ = fmt.Print
+	_ = utf8.UTFMax
+	_ = (*regexp.Regexp)(nil)
+	_ = (*strings.Reader)(nil)
+	_ = net.IPv4len
+	_ = time.Duration(0)
+	_ = (*url.URL)(nil)
+	_ = (*mail.Address)(nil)
+	_ = anypb.Any{}
+	_ = sort.Sort
+)
+
+// Validate checks the field values on AuthInfo with the rules defined in the
+// proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *AuthInfo) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on AuthInfo with the rules defined in
+// the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in AuthInfoMultiError, or nil
+// if none found.
+func (m *AuthInfo) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *AuthInfo) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Name
+
+	// no validation rules for Email
+
+	// no validation rules for Role
+
+	// no validation rules for Password
+
+	if len(errors) > 0 {
+		return AuthInfoMultiError(errors)
+	}
+
+	return nil
+}
+
+// AuthInfoMultiError is an error wrapping multiple validation errors returned
+// by AuthInfo.ValidateAll() if the designated constraints aren't met.
+type AuthInfoMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m AuthInfoMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m AuthInfoMultiError) AllErrors() []error { return m }
+
+// AuthInfoValidationError is the validation error returned by
+// AuthInfo.Validate if the designated constraints aren't met.
+type AuthInfoValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e AuthInfoValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e AuthInfoValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e AuthInfoValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e AuthInfoValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e AuthInfoValidationError) ErrorName() string { return "AuthInfoValidationError" }
+
+// Error satisfies the builtin error interface
+func (e AuthInfoValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sAuthInfo.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = AuthInfoValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = AuthInfoValidationError{}
+
+// Validate checks the field values on CreateRequest with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *CreateRequest) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on CreateRequest with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in CreateRequestMultiError, or
+// nil if none found.
+func (m *CreateRequest) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *CreateRequest) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	if all {
+		switch v := interface{}(m.GetInfo()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, CreateRequestValidationError{
+					field:  "Info",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, CreateRequestValidationError{
+					field:  "Info",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetInfo()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return CreateRequestValidationError{
+				field:  "Info",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return CreateRequestMultiError(errors)
+	}
+
+	return nil
+}
+
+// CreateRequestMultiError is an error wrapping multiple validation errors
+// returned by CreateRequest.ValidateAll() if the designated constraints
+// aren't met.
+type CreateRequestMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m CreateRequestMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m CreateRequestMultiError) AllErrors() []error { return m }
+
+// CreateRequestValidationError is the validation error returned by
+// CreateRequest.Validate if the designated constraints aren't met.
+type CreateRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e CreateRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e CreateRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e CreateRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e CreateRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e CreateRequestValidationError) ErrorName() string { return "CreateRequestValidationError" }
+
+// Error satisfies the builtin error interface
+func (e CreateRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sCreateRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = CreateRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = CreateRequestValidationError{}
+
+// Validate checks the field values on CreateResponse with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *CreateResponse) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on CreateResponse with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in CreateResponseMultiError,
+// or nil if none found.
+func (m *CreateResponse) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *CreateResponse) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Id
+
+	if len(errors) > 0 {
+		return CreateResponseMultiError(errors)
+	}
+
+	return nil
+}
+
+// CreateResponseMultiError is an error wrapping multiple validation errors
+// returned by CreateResponse.ValidateAll() if the designated constraints
+// aren't met.
+type CreateResponseMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m CreateResponseMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m CreateResponseMultiError) AllErrors() []error { return m }
+
+// CreateResponseValidationError is the validation error returned by
+// CreateResponse.Validate if the designated constraints aren't met.
+type CreateResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e CreateResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e CreateResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e CreateResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e CreateResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e CreateResponseValidationError) ErrorName() string { return "CreateResponseValidationError" }
+
+// Error satisfies the builtin error interface
+func (e CreateResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sCreateResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = CreateResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = CreateResponseValidationError{}
+
+// Validate checks the field values on GetRequest with the rules defined in the
+// proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *GetRequest) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on GetRequest with the rules defined in
+// the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in GetRequestMultiError, or
+// nil if none found.
+func (m *GetRequest) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *GetRequest) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Id
+
+	if len(errors) > 0 {
+		return GetRequestMultiError(errors)
+	}
+
+	return nil
+}
+
+// GetRequestMultiError is an error wrapping multiple validation errors
+// returned by GetRequest.ValidateAll() if the designated constraints aren't met.
+type GetRequestMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m GetRequestMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m GetRequestMultiError) AllErrors() []error { return m }
+
+// GetRequestValidationError is the validation error returned by
+// GetRequest.Validate if the designated constraints aren't met.
+type GetRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GetRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetRequestValidationError) ErrorName() string { return "GetRequestValidationError" }
+
+// Error satisfies the builtin error interface
+func (e GetRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetRequestValidationError{}
+
+// Validate checks the field values on Auth with the rules defined in the proto
+// definition for this message. If any rules are violated, the first error
+// encountered is returned, or nil if there are no violations.
+func (m *Auth) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on Auth with the rules defined in the
+// proto definition for this message. If any rules are violated, the result is
+// a list of violation errors wrapped in AuthMultiError, or nil if none found.
+func (m *Auth) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *Auth) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Id
+
+	if all {
+		switch v := interface{}(m.GetInfo()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "Info",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "Info",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetInfo()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return AuthValidationError{
+				field:  "Info",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if all {
+		switch v := interface{}(m.GetCreatedAt()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "CreatedAt",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "CreatedAt",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetCreatedAt()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return AuthValidationError{
+				field:  "CreatedAt",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if all {
+		switch v := interface{}(m.GetUpdatedAt()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "UpdatedAt",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, AuthValidationError{
+					field:  "UpdatedAt",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetUpdatedAt()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return AuthValidationError{
+				field:  "UpdatedAt",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return AuthMultiError(errors)
+	}
+
+	return nil
+}
+
+// AuthMultiError is an error wrapping multiple validation errors returned by
+// Auth.ValidateAll() if the designated constraints aren't met.
+type AuthMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m AuthMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m AuthMultiError) AllErrors() []error { return m }
+
+// AuthValidationError is the validation error returned by Auth.Validate if the
+// designated constraints aren't met.
+type AuthValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e AuthValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e AuthValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e AuthValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e AuthValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e AuthValidationError) ErrorName() string { return "AuthValidationError" }
+
+// Error satisfies the builtin error interface
+func (e AuthValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sAuth.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = AuthValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = AuthValidationError{}
+
+// Validate checks the field values on GetResponse with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *GetResponse) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on GetResponse with the rules defined in
+// the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in GetResponseMultiError, or
+// nil if none found.
+func (m *GetResponse) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *GetResponse) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	if all {
+		switch v := interface{}(m.GetAuth()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, GetResponseValidationError{
+					field:  "Auth",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, GetResponseValidationError{
+					field:  "Auth",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetAuth()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return GetResponseValidationError{
+				field:  "Auth",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return GetResponseMultiError(errors)
+	}
+
+	return nil
+}
+
+// GetResponseMultiError is an error wrapping multiple validation errors
+// returned by GetResponse.ValidateAll() if the designated constraints aren't met.
+type GetResponseMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m GetResponseMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m GetResponseMultiError) AllErrors() []error { return m }
+
+// GetResponseValidationError is the validation error returned by
+// GetResponse.Validate if the designated constraints aren't met.
+type GetResponseValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e GetResponseValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e GetResponseValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e GetResponseValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e GetResponseValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e GetResponseValidationError) ErrorName() string { return "GetResponseValidationError" }
+
+// Error satisfies the builtin error interface
+func (e GetResponseValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sGetResponse.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = GetResponseValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = GetResponseValidationError{}
+
+// Validate checks the field values on UpdateRequest with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *UpdateRequest) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on UpdateRequest with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in UpdateRequestMultiError, or
+// nil if none found.
+func (m *UpdateRequest) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *UpdateRequest) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Id
+
+	if all {
+		switch v := interface{}(m.GetName()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, UpdateRequestValidationError{
+					field:  "Name",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, UpdateRequestValidationError{
+					field:  "Name",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetName()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return UpdateRequestValidationError{
+				field:  "Name",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if all {
+		switch v := interface{}(m.GetEmail()).(type) {
+		case interface{ ValidateAll() error }:
+			if err := v.ValidateAll(); err != nil {
+				errors = append(errors, UpdateRequestValidationError{
+					field:  "Email",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		case interface{ Validate() error }:
+			if err := v.Validate(); err != nil {
+				errors = append(errors, UpdateRequestValidationError{
+					field:  "Email",
+					reason: "embedded message failed validation",
+					cause:  err,
+				})
+			}
+		}
+	} else if v, ok := interface{}(m.GetEmail()).(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			return UpdateRequestValidationError{
+				field:  "Email",
+				reason: "embedded message failed validation",
+				cause:  err,
+			}
+		}
+	}
+
+	if len(errors) > 0 {
+		return UpdateRequestMultiError(errors)
+	}
+
+	return nil
+}
+
+// UpdateRequestMultiError is an error wrapping multiple validation errors
+// returned by UpdateRequest.ValidateAll() if the designated constraints
+// aren't met.
+type UpdateRequestMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m UpdateRequestMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m UpdateRequestMultiError) AllErrors() []error { return m }
+
+// UpdateRequestValidationError is the validation error returned by
+// UpdateRequest.Validate if the designated constraints aren't met.
+type UpdateRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e UpdateRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e UpdateRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e UpdateRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e UpdateRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e UpdateRequestValidationError) ErrorName() string { return "UpdateRequestValidationError" }
+
+// Error satisfies the builtin error interface
+func (e UpdateRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sUpdateRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = UpdateRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = UpdateRequestValidationError{}
+
+// Validate checks the field values on DeleteRequest with the rules defined in
+// the proto definition for this message. If any rules are violated, the first
+// error encountered is returned, or nil if there are no violations.
+func (m *DeleteRequest) Validate() error {
+	return m.validate(false)
+}
+
+// ValidateAll checks the field values on DeleteRequest with the rules defined
+// in the proto definition for this message. If any rules are violated, the
+// result is a list of violation errors wrapped in DeleteRequestMultiError, or
+// nil if none found.
+func (m *DeleteRequest) ValidateAll() error {
+	return m.validate(true)
+}
+
+func (m *DeleteRequest) validate(all bool) error {
+	if m == nil {
+		return nil
+	}
+
+	var errors []error
+
+	// no validation rules for Id
+
+	if len(errors) > 0 {
+		return DeleteRequestMultiError(errors)
+	}
+
+	return nil
+}
+
+// DeleteRequestMultiError is an error wrapping multiple validation errors
+// returned by DeleteRequest.ValidateAll() if the designated constraints
+// aren't met.
+type DeleteRequestMultiError []error
+
+// Error returns a concatenation of all the error messages it wraps.
+func (m DeleteRequestMultiError) Error() string {
+	msgs := make([]string, 0, len(m))
+	for _, err := range m {
+		msgs = append(msgs, err.Error())
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// AllErrors returns a list of validation violation errors.
+func (m DeleteRequestMultiError) AllErrors() []error { return m }
+
+// DeleteRequestValidationError is the validation error returned by
+// DeleteRequest.Validate if the designated constraints aren't met.
+type DeleteRequestValidationError struct {
+	field  string
+	reason string
+	cause  error
+	key    bool
+}
+
+// Field function returns field value.
+func (e DeleteRequestValidationError) Field() string { return e.field }
+
+// Reason function returns reason value.
+func (e DeleteRequestValidationError) Reason() string { return e.reason }
+
+// Cause function returns cause value.
+func (e DeleteRequestValidationError) Cause() error { return e.cause }
+
+// Key function returns key value.
+func (e DeleteRequestValidationError) Key() bool { return e.key }
+
+// ErrorName returns error name.
+func (e DeleteRequestValidationError) ErrorName() string { return "DeleteRequestValidationError" }
+
+// Error satisfies the builtin error interface
+func (e DeleteRequestValidationError) Error() string {
+	cause := ""
+	if e.cause != nil {
+		cause = fmt.Sprintf(" | caused by: %v", e.cause)
+	}
+
+	key := ""
+	if e.key {
+		key = "key for "
+	}
+
+	return fmt.Sprintf(
+		"invalid %sDeleteRequest.%s: %s%s",
+		key,
+		e.field,
+		e.reason,
+		cause)
+}
+
+var _ error = DeleteRequestValidationError{}
+
+var _ interface {
+	Field() string
+	Reason() string
+	Key() bool
+	Cause() error
+	ErrorName() string
+} = DeleteRequestValidationError{}
+
+==== ./pkg/auth_v1/auth.pb.gw.go ====
+// Code generated by protoc-gen-grpc-gateway. DO NOT EDIT.
+// source: auth.proto
+
+/*
+Package auth_v1 is a reverse proxy.
+
+It translates gRPC into RESTful JSON APIs.
+*/
+package auth_v1
+
+import (
+	"context"
+	"io"
+	"net/http"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/grpc-ecosystem/grpc-gateway/v2/utilities"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/grpclog"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/proto"
+)
+
+// Suppress "imported and not used" errors
+var _ codes.Code
+var _ io.Reader
+var _ status.Status
+var _ = runtime.String
+var _ = utilities.NewDoubleArray
+var _ = metadata.Join
+
+func request_AuthV1_Create_0(ctx context.Context, marshaler runtime.Marshaler, client AuthV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq CreateRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.Create(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_AuthV1_Create_0(ctx context.Context, marshaler runtime.Marshaler, server AuthV1Server, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq CreateRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.Create(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+var (
+	filter_AuthV1_Get_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
+func request_AuthV1_Get_0(ctx context.Context, marshaler runtime.Marshaler, client AuthV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthV1_Get_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.Get(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_AuthV1_Get_0(ctx context.Context, marshaler runtime.Marshaler, server AuthV1Server, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq GetRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthV1_Get_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.Get(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+func request_AuthV1_Update_0(ctx context.Context, marshaler runtime.Marshaler, client AuthV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UpdateRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.Update(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_AuthV1_Update_0(ctx context.Context, marshaler runtime.Marshaler, server AuthV1Server, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq UpdateRequest
+	var metadata runtime.ServerMetadata
+
+	newReader, berr := utilities.IOReaderFactory(req.Body)
+	if berr != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", berr)
+	}
+	if err := marshaler.NewDecoder(newReader()).Decode(&protoReq); err != nil && err != io.EOF {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.Update(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+var (
+	filter_AuthV1_Delete_0 = &utilities.DoubleArray{Encoding: map[string]int{}, Base: []int(nil), Check: []int(nil)}
+)
+
+func request_AuthV1_Delete_0(ctx context.Context, marshaler runtime.Marshaler, client AuthV1Client, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq DeleteRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthV1_Delete_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := client.Delete(ctx, &protoReq, grpc.Header(&metadata.HeaderMD), grpc.Trailer(&metadata.TrailerMD))
+	return msg, metadata, err
+
+}
+
+func local_request_AuthV1_Delete_0(ctx context.Context, marshaler runtime.Marshaler, server AuthV1Server, req *http.Request, pathParams map[string]string) (proto.Message, runtime.ServerMetadata, error) {
+	var protoReq DeleteRequest
+	var metadata runtime.ServerMetadata
+
+	if err := req.ParseForm(); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+	if err := runtime.PopulateQueryParameters(&protoReq, req.Form, filter_AuthV1_Delete_0); err != nil {
+		return nil, metadata, status.Errorf(codes.InvalidArgument, "%v", err)
+	}
+
+	msg, err := server.Delete(ctx, &protoReq)
+	return msg, metadata, err
+
+}
+
+// RegisterAuthV1HandlerServer registers the http handlers for service AuthV1 to "mux".
+// UnaryRPC     :call AuthV1Server directly.
+// StreamingRPC :currently unsupported pending https://github.com/grpc/grpc-go/issues/906.
+// Note that using this registration option will cause many gRPC library features to stop working. Consider using RegisterAuthV1HandlerFromEndpoint instead.
+func RegisterAuthV1HandlerServer(ctx context.Context, mux *runtime.ServeMux, server AuthV1Server) error {
+
+	mux.Handle("POST", pattern_AuthV1_Create_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/auth_v1.AuthV1/Create", runtime.WithHTTPPathPattern("/auth/v1/create"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_AuthV1_Create_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Create_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("GET", pattern_AuthV1_Get_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/auth_v1.AuthV1/Get", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_AuthV1_Get_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Get_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("PATCH", pattern_AuthV1_Update_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/auth_v1.AuthV1/Update", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_AuthV1_Update_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Update_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("DELETE", pattern_AuthV1_Delete_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		var stream runtime.ServerTransportStream
+		ctx = grpc.NewContextWithServerTransportStream(ctx, &stream)
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateIncomingContext(ctx, mux, req, "/auth_v1.AuthV1/Delete", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := local_request_AuthV1_Delete_0(annotatedContext, inboundMarshaler, server, req, pathParams)
+		md.HeaderMD, md.TrailerMD = metadata.Join(md.HeaderMD, stream.Header()), metadata.Join(md.TrailerMD, stream.Trailer())
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Delete_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
+// RegisterAuthV1HandlerFromEndpoint is same as RegisterAuthV1Handler but
+// automatically dials to "endpoint" and closes the connection when "ctx" gets done.
+func RegisterAuthV1HandlerFromEndpoint(ctx context.Context, mux *runtime.ServeMux, endpoint string, opts []grpc.DialOption) (err error) {
+	conn, err := grpc.DialContext(ctx, endpoint, opts...)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			if cerr := conn.Close(); cerr != nil {
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+			}
+			return
+		}
+		go func() {
+			<-ctx.Done()
+			if cerr := conn.Close(); cerr != nil {
+				grpclog.Infof("Failed to close conn to %s: %v", endpoint, cerr)
+			}
+		}()
+	}()
+
+	return RegisterAuthV1Handler(ctx, mux, conn)
+}
+
+// RegisterAuthV1Handler registers the http handlers for service AuthV1 to "mux".
+// The handlers forward requests to the grpc endpoint over "conn".
+func RegisterAuthV1Handler(ctx context.Context, mux *runtime.ServeMux, conn *grpc.ClientConn) error {
+	return RegisterAuthV1HandlerClient(ctx, mux, NewAuthV1Client(conn))
+}
+
+// RegisterAuthV1HandlerClient registers the http handlers for service AuthV1
+// to "mux". The handlers forward requests to the grpc endpoint over the given implementation of "AuthV1Client".
+// Note: the gRPC framework executes interceptors within the gRPC handler. If the passed in "AuthV1Client"
+// doesn't go through the normal gRPC flow (creating a gRPC client etc.) then it will be up to the passed in
+// "AuthV1Client" to call the correct interceptors.
+func RegisterAuthV1HandlerClient(ctx context.Context, mux *runtime.ServeMux, client AuthV1Client) error {
+
+	mux.Handle("POST", pattern_AuthV1_Create_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/auth_v1.AuthV1/Create", runtime.WithHTTPPathPattern("/auth/v1/create"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_AuthV1_Create_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Create_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("GET", pattern_AuthV1_Get_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/auth_v1.AuthV1/Get", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_AuthV1_Get_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Get_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("PATCH", pattern_AuthV1_Update_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/auth_v1.AuthV1/Update", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_AuthV1_Update_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Update_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	mux.Handle("DELETE", pattern_AuthV1_Delete_0, func(w http.ResponseWriter, req *http.Request, pathParams map[string]string) {
+		ctx, cancel := context.WithCancel(req.Context())
+		defer cancel()
+		inboundMarshaler, outboundMarshaler := runtime.MarshalerForRequest(mux, req)
+		var err error
+		var annotatedContext context.Context
+		annotatedContext, err = runtime.AnnotateContext(ctx, mux, req, "/auth_v1.AuthV1/Delete", runtime.WithHTTPPathPattern("/auth/v1"))
+		if err != nil {
+			runtime.HTTPError(ctx, mux, outboundMarshaler, w, req, err)
+			return
+		}
+		resp, md, err := request_AuthV1_Delete_0(annotatedContext, inboundMarshaler, client, req, pathParams)
+		annotatedContext = runtime.NewServerMetadataContext(annotatedContext, md)
+		if err != nil {
+			runtime.HTTPError(annotatedContext, mux, outboundMarshaler, w, req, err)
+			return
+		}
+
+		forward_AuthV1_Delete_0(annotatedContext, mux, outboundMarshaler, w, req, resp, mux.GetForwardResponseOptions()...)
+
+	})
+
+	return nil
+}
+
+var (
+	pattern_AuthV1_Create_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1, 2, 2}, []string{"auth", "v1", "create"}, ""))
+
+	pattern_AuthV1_Get_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"auth", "v1"}, ""))
+
+	pattern_AuthV1_Update_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"auth", "v1"}, ""))
+
+	pattern_AuthV1_Delete_0 = runtime.MustPattern(runtime.NewPattern(1, []int{2, 0, 2, 1}, []string{"auth", "v1"}, ""))
+)
+
+var (
+	forward_AuthV1_Create_0 = runtime.ForwardResponseMessage
+
+	forward_AuthV1_Get_0 = runtime.ForwardResponseMessage
+
+	forward_AuthV1_Update_0 = runtime.ForwardResponseMessage
+
+	forward_AuthV1_Delete_0 = runtime.ForwardResponseMessage
+)
+
+==== ./internal/converter/auth.go ====
+package converter
+
+import (
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func ToAuthFromService(auth *model.Auth) *desc.Auth {
+	var updatedAt *timestamppb.Timestamp
+	if auth.UpdatedAt.Valid {
+		updatedAt = timestamppb.New(auth.UpdatedAt.Time)
+	}
+
+	return &desc.Auth{
+		Id:        auth.ID,
+		Info:      ToAuthInfoFromService(auth.Info),
+		CreatedAt: timestamppb.New(auth.CreatedAt),
+		UpdatedAt: updatedAt,
+	}
+}
+
+func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
+	return &desc.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
+	return &model.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+==== ./internal/closer/closer.go ====
+package closer
+
+import (
+	"log"
+	"os"
+	"os/signal"
+	"sync"
+)
+
+var globalCloser = New()
+
+// Add adds `func() error` callback to the globalCloser
+func Add(f ...func() error) {
+	globalCloser.Add(f...)
+}
+
+// Wait ...
+func Wait() {
+	globalCloser.Wait()
+}
+
+// CloseAll ...
+func CloseAll() {
+	globalCloser.CloseAll()
+}
+
+// Closer ...
+type Closer struct {
+	mu    sync.Mutex
+	once  sync.Once
+	done  chan struct{}
+	funcs []func() error
+}
+
+// New returns new Closer, if []os.Signal is specified Closer will automatically call CloseAll when one of signals is received from OS
+func New(sig ...os.Signal) *Closer {
+	c := &Closer{done: make(chan struct{})}
+	if len(sig) > 0 {
+		go func() {
+			ch := make(chan os.Signal, 1)
+			signal.Notify(ch, sig...)
+			<-ch
+			signal.Stop(ch)
+			c.CloseAll()
+		}()
+	}
+	return c
+}
+
+// Add func to closer
+func (c *Closer) Add(f ...func() error) {
+	c.mu.Lock()
+	c.funcs = append(c.funcs, f...)
+	c.mu.Unlock()
+}
+
+// Wait blocks until all closer functions are done
+func (c *Closer) Wait() {
+	<-c.done
+}
+
+// CloseAll calls all closer functions
+func (c *Closer) CloseAll() {
+	c.once.Do(func() {
+		defer close(c.done)
+
+		c.mu.Lock()
+		funcs := c.funcs
+		c.funcs = nil
+		c.mu.Unlock()
+
+		// call all Closer funcs async
+		errs := make(chan error, len(funcs))
+		for _, f := range funcs {
+			go func(f func() error) {
+				errs <- f()
+			}(f)
+		}
+
+		for i := 0; i < cap(errs); i++ {
+			if err := <-errs; err != nil {
+				log.Println("error returned from Closer")
+			}
+		}
+	})
+}
+
+==== ./internal/client/db/transaction/transaction.go ====
+package transaction
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/pkg/errors"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+)
+
+type manager struct {
+	db db.Transactor
+}
+
+// NewTransactionManager создает новый менеджер транзакций, который удовлетворяет интерфейсу db.TxManager
+func NewTransactionManager(db db.Transactor) db.TxManager {
+	return &manager{
+		db: db,
+	}
+}
+
+// transaction основная функция, которая выполняет указанный пользователем обработчик в транзакции
+func (m *manager) transaction(ctx context.Context, opts pgx.TxOptions, fn db.Handler) (err error) {
+	// Если это вложенная транзакция, пропускаем инициацию новой транзакции и выполняем обработчик.
+	tx, ok := ctx.Value(pg.TxKey).(pgx.Tx)
+	if ok {
+		return fn(ctx)
+	}
+
+	// Стартуем новую транзакцию.
+	tx, err = m.db.BeginTx(ctx, opts)
+	if err != nil {
+		return errors.Wrap(err, "can't begin transaction")
+	}
+
+	// Кладем транзакцию в контекст.
+	ctx = pg.MakeContextTx(ctx, tx)
+
+	// Настраиваем функцию отсрочки для отката или коммита транзакции.
+	defer func() {
+		// восстанавливаемся после паники
+		if r := recover(); r != nil {
+			err = errors.Errorf("panic recovered: %v", r)
+		}
+
+		// откатываем транзакцию, если произошла ошибка
+		if err != nil {
+			if errRollback := tx.Rollback(ctx); errRollback != nil {
+				err = errors.Wrapf(err, "errRollback: %v", errRollback)
+			}
+
+			return
+		}
+
+		// если ошибок не было, коммитим транзакцию
+		if nil == err {
+			err = tx.Commit(ctx)
+			if err != nil {
+				err = errors.Wrap(err, "tx commit failed")
+			}
+		}
+	}()
+
+	// Выполните код внутри транзакции.
+	// Если функция терпит неудачу, возвращаем ошибку, и функция отсрочки выполняет откат
+	// или в противном случае транзакция коммитится.
+	if err = fn(ctx); err != nil {
+		err = errors.Wrap(err, "failed executing code inside transaction")
+	}
+
+	return err
+}
+
+func (m *manager) ReadCommitted(ctx context.Context, f db.Handler) error {
+	txOpts := pgx.TxOptions{IsoLevel: pgx.ReadCommitted}
+	return m.transaction(ctx, txOpts, f)
+}
+
+==== ./internal/client/db/pg/client.go ====
+package pg
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/pkg/errors"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+)
+
+type pgClient struct {
+	masterDBC db.DB
+}
+
+func New(ctx context.Context, dsn string) (db.Client, error) {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse config")
+	}
+
+	dbc, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create pool")
+	}
+
+	return &pgClient{
+		masterDBC: &pg{dbc: dbc},
+	}, nil
+}
+
+func (c *pgClient) DB() db.DB {
+	return c.masterDBC
+}
+
+func (c *pgClient) Close() error {
+	if c.masterDBC != nil {
+		c.masterDBC.Close()
+	}
+
+	return nil
+}
+
+==== ./internal/client/db/pg/pg.go ====
+package pg
+
+import (
+	"context"
+	"fmt"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"log"
+
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/prettier"
+)
+
+type key string
+
+const (
+	TxKey key = "tx"
+)
+
+type pg struct {
+	dbc *pgxpool.Pool
+}
+
+func NewDB(dbc *pgxpool.Pool) db.DB {
+	return &pg{
+		dbc: dbc,
+	}
+}
+
+func (p *pg) ScanOneContext(ctx context.Context, dest interface{}, q db.Query, args ...interface{}) error {
+	logQuery(ctx, q, args...)
+
+	row, err := p.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	return pgxscan.ScanOne(dest, row)
+}
+
+func (p *pg) ScanAllContext(ctx context.Context, dest interface{}, q db.Query, args ...interface{}) error {
+	logQuery(ctx, q, args...)
+
+	rows, err := p.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	return pgxscan.ScanAll(dest, rows)
+}
+
+func (p *pg) ExecContext(ctx context.Context, q db.Query, args ...interface{}) (pgconn.CommandTag, error) {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.Exec(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.Exec(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) QueryContext(ctx context.Context, q db.Query, args ...interface{}) (pgx.Rows, error) {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.Query(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.Query(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) QueryRowContext(ctx context.Context, q db.Query, args ...interface{}) pgx.Row {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.QueryRow(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.QueryRow(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error) {
+	return p.dbc.BeginTx(ctx, txOptions)
+}
+
+func (p *pg) Ping(ctx context.Context) error {
+	return p.dbc.Ping(ctx)
+}
+
+func (p *pg) Close() {
+	p.dbc.Close()
+}
+
+func MakeContextTx(ctx context.Context, tx pgx.Tx) context.Context {
+	return context.WithValue(ctx, TxKey, tx)
+}
+
+func logQuery(ctx context.Context, q db.Query, args ...interface{}) {
+	prettyQuery := prettier.Pretty(q.QueryRaw, prettier.PlaceholderDollar, args...)
+	log.Println(
+		ctx,
+		fmt.Sprintf("sql: %s", q.Name),
+		fmt.Sprintf("query: %s", prettyQuery),
+	)
+}
+
+==== ./internal/client/db/db.go ====
+package db
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+// Handler - функция, которая выполняется в транзакции
+type Handler func(ctx context.Context) error
+
+// Client клиент для работы с БД
+type Client interface {
+	DB() DB
+	Close() error
+}
+
+// TxManager менеджер транзакций, который выполняет указанный пользователем обработчик в транзакции
+type TxManager interface {
+	ReadCommitted(ctx context.Context, f Handler) error
+}
+
+// Query обертка над запросом, хранящая имя запроса и сам запрос
+// Имя запроса используется для логирования и потенциально может использоваться еще где-то, например, для трейсинга
+type Query struct {
+	Name     string
+	QueryRaw string
+}
+
+// Transactor интерфейс для работы с транзакциями
+type Transactor interface {
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+}
+
+// SQLExecer комбинирует NamedExecer и QueryExecer
+type SQLExecer interface {
+	NamedExecer
+	QueryExecer
+}
+
+// NamedExecer интерфейс для работы с именованными запросами с помощью тегов в структурах
+type NamedExecer interface {
+	ScanOneContext(ctx context.Context, dest interface{}, q Query, args ...interface{}) error
+	ScanAllContext(ctx context.Context, dest interface{}, q Query, args ...interface{}) error
+}
+
+// QueryExecer интерфейс для работы с обычными запросами
+type QueryExecer interface {
+	ExecContext(ctx context.Context, q Query, args ...interface{}) (pgconn.CommandTag, error)
+	QueryContext(ctx context.Context, q Query, args ...interface{}) (pgx.Rows, error)
+	QueryRowContext(ctx context.Context, q Query, args ...interface{}) pgx.Row
+}
+
+// Pinger интерфейс для проверки соединения с БД
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// DB интерфейс для работы с БД
+type DB interface {
+	SQLExecer
+	Transactor
+	Pinger
+	Close()
+}
+
+==== ./internal/client/db/prettier/querry_prettier.go ====
+package prettier
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+const (
+	PlaceholderDollar   = "$"
+	PlaceholderQuestion = "?"
+)
+
+func Pretty(query string, placeholder string, args ...any) string {
+	for i, param := range args {
+		var value string
+		switch v := param.(type) {
+		case string:
+			value = fmt.Sprintf("%q", v)
+		case []byte:
+			value = fmt.Sprintf("%q", string(v))
+		default:
+			value = fmt.Sprintf("%v", v)
+		}
+
+		query = strings.Replace(query, fmt.Sprintf("%s%s", placeholder, strconv.Itoa(i+1)), value, -1)
+	}
+
+	query = strings.ReplaceAll(query, "\t", "")
+	query = strings.ReplaceAll(query, "\n", " ")
+
+	return strings.TrimSpace(query)
+}
+
+==== ./internal/model/auth.go ====
+package model
+
+import (
+	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"time"
+)
+
+type Auth struct {
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+}
+
+type AuthInfo struct {
+	Name     string
+	Email    string
+	Role     auth_v1.Role
+	Password string
+}
+
+==== ./internal/service/service.go ====
+package service
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthService interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+==== ./internal/service/auth/get.go ====
+package auth
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func (s *serv) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	auth, err := s.authRepository.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return auth, nil
+}
+
+==== ./internal/service/auth/service.go ====
+package auth
+
+import (
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/repository"
+	"github.com/beachrockhotel/auth/internal/service"
+)
+
+type serv struct {
+	authRepository repository.AuthRepository
+	txManager      db.TxManager
+}
+
+func NewService(
+	authRepository repository.AuthRepository,
+	txManager db.TxManager,
+) service.AuthService {
+	return &serv{
+		authRepository: authRepository,
+		txManager:      txManager,
+	}
+}
+
+==== ./internal/service/auth/create.go ====
+package auth
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func (s *serv) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	var id int64
+	err := s.txManager.ReadCommitted(ctx, func(ctx context.Context) error {
+		var errTx error
+		id, errTx = s.authRepository.Create(ctx, info)
+		if errTx != nil {
+			return errTx
+		}
+
+		_, errTx = s.authRepository.Get(ctx, id)
+		if errTx != nil {
+			return errTx
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+==== ./internal/service/auth/service_test.go ====
+package auth_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/service/auth"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+type mockRepo struct {
+	mock.Mock
+}
+
+func (m *mockRepo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	args := m.Called(ctx, info)
+	return int64(args.Int(0)), args.Error(1)
+}
+
+func (m *mockRepo) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(*model.Auth), args.Error(1)
+}
+
+type mockTx struct {
+	mock.Mock
+}
+
+func (m *mockTx) ReadCommitted(ctx context.Context, f db.Handler) error {
+	return f(ctx)
+}
+
+func TestCreate(t *testing.T) {
+	repo := &mockRepo{}
+	tx := &mockTx{}
+
+	s := auth.NewService(repo, tx)
+
+	repo.On("Create", mock.Anything, mock.Anything).Return(1, nil)
+	repo.On("Get", mock.Anything, int64(1)).Return(&model.Auth{ID: 1}, nil)
+
+	id, err := s.Create(context.Background(), &model.AuthInfo{Name: "John"})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+}
+
+==== ./internal/repository/auth/converter/auth.go ====
+package converter
+
+import (
+	"github.com/beachrockhotel/auth/internal/model"
+	modelRepo "github.com/beachrockhotel/auth/internal/repository/auth/model"
+)
+
+func ToAuthFromRepo(auth *modelRepo.Auth) *model.Auth {
+	return &model.Auth{
+		ID:        auth.ID,
+		Info:      ToAuthInfoFromRepo(auth.Info),
+		CreatedAt: auth.CreatedAt,
+		UpdatedAt: auth.UpdatedAt,
+	}
+}
+
+func ToAuthInfoFromRepo(info modelRepo.AuthInfo) model.AuthInfo {
+	return model.AuthInfo{
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  info.Role,
+	}
+}
+
+==== ./internal/repository/auth/repository_test.go ====
+package auth_test
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+	"github.com/beachrockhotel/auth/internal/model"
+	repoAuth "github.com/beachrockhotel/auth/internal/repository/auth"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCreateAndGet(t *testing.T) {
+
+	dsn := os.Getenv("PG_DSN")
+	ctx := context.Background()
+
+	client, err := pg.New(ctx, dsn)
+	require.NoError(t, err)
+	defer client.Close()
+
+	repo := repoAuth.NewRepository(client)
+
+	id, err := repo.Create(ctx, &model.AuthInfo{
+		Name:     "Test",
+		Email:    "test@example.com",
+		Role:     1,
+		Password: "secret",
+	})
+	require.NoError(t, err)
+
+	authObj, err := repo.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "Test", authObj.Info.Name)
+}
+
+==== ./internal/repository/auth/model/auth.go ====
+package model
+
+import (
+	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"time"
+)
+
+type Auth struct {
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+}
+
+type AuthInfo struct {
+	Name  string
+	Email string
+	Role  auth_v1.Role
+}
+
+==== ./internal/repository/auth/repository.go ====
+package auth
+
+import (
+	"context"
+
+	sq "github.com/Masterminds/squirrel"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/repository"
+	"github.com/beachrockhotel/auth/internal/repository/auth/converter"
+	modelRepo "github.com/beachrockhotel/auth/internal/repository/auth/model"
+)
+
+const (
+	tableName = "auth"
+
+	idColumn        = "id"
+	nameColumn      = "name"
+	emailColumn     = "email"
+	roleColumn      = "role"
+	passwordColumn  = "password"
+	createdAtColumn = "created_at"
+	updatedAtColumn = "updated_at"
+)
+
+type repo struct {
+	db db.Client
+}
+
+func NewRepository(db db.Client) repository.AuthRepository {
+	return &repo{db: db}
+}
+
+func (r *repo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	builder := sq.Insert(tableName).
+		PlaceholderFormat(sq.Dollar).
+		Columns(nameColumn, emailColumn, roleColumn, passwordColumn).
+		Values(info.Name, info.Email, info.Role, info.Password).
+		Suffix("RETURNING id")
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return 0, err
+	}
+
+	q := db.Query{
+		Name:     "auth_repository.Create",
+		QueryRaw: query,
+	}
+
+	var id int64
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+func (r *repo) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	builder := sq.Select(idColumn, nameColumn, emailColumn, roleColumn, createdAtColumn, updatedAtColumn).
+		PlaceholderFormat(sq.Dollar).
+		From(tableName).
+		Where(sq.Eq{idColumn: id}).
+		Limit(1)
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	q := db.Query{
+		Name:     "auth_repository.Get",
+		QueryRaw: query,
+	}
+
+	var auth modelRepo.Auth
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&auth.ID, &auth.Info.Name, &auth.Info.Email, &auth.Info.Role, &auth.CreatedAt, &auth.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.ToAuthFromRepo(&auth), nil
+}
+
+==== ./internal/repository/repository.go ====
+package repository
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthRepository interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+==== ./internal/api/auth/get.go ====
+package auth
+
+import (
+	"context"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/converter"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
+	authObj, err := i.authService.Get(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("id: %d, name: %s, email: %s, role: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info.Name, authObj.Info.Email, authObj.Info.Role, authObj.CreatedAt, authObj.UpdatedAt)
+
+	return &desc.GetResponse{
+		Auth: converter.ToAuthFromService(authObj),
+	}, nil
+}
+
+==== ./internal/api/auth/service.go ====
+package auth
+
+import (
+	"github.com/beachrockhotel/auth/internal/service"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+type Implementation struct {
+	desc.UnimplementedAuthV1Server
+	authService service.AuthService
+}
+
+func NewImplementation(authService service.AuthService) *Implementation {
+	return &Implementation{
+		authService: authService,
+	}
+}
+
+==== ./internal/api/auth/create.go ====
+package auth
+
+import (
+	"context"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/converter"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func (i *Implementation) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	id, err := i.authService.Create(ctx, converter.ToAuthInfoFromDesc(req.GetInfo()))
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("inserted user with id: %d", id)
+
+	return &desc.CreateResponse{
+		Id: id,
+	}, nil
+}
+
+==== ./internal/api/auth/service_test.go ====
+package auth_test
+
+import (
+	"context"
+	"github.com/stretchr/testify/require"
+	"log"
+	"net"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/api/auth"
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+type mockAuthService struct {
+	mock.Mock
+}
+
+func (m *mockAuthService) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	args := m.Called(ctx, info)
+	return int64(args.Int(0)), args.Error(1)
+}
+
+func (m *mockAuthService) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(*model.Auth), args.Error(1)
+}
+
+func dialer(srv desc.AuthV1Server) func(context.Context, string) (net.Conn, error) {
+	lis := bufconn.Listen(1024 * 1024)
+	s := grpc.NewServer()
+	desc.RegisterAuthV1Server(s, srv)
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	return func(ctx context.Context, s string) (net.Conn, error) {
+		return lis.Dial()
+	}
+}
+
+func TestCreate(t *testing.T) {
+	mockSvc := &mockAuthService{}
+	impl := auth.NewImplementation(mockSvc)
+
+	// Ожидание мока
+	mockSvc.On("Create", mock.Anything, mock.Anything).Return(123, nil)
+
+	conn, err := grpc.DialContext(context.Background(), "", grpc.WithInsecure(), grpc.WithContextDialer(dialer(impl)))
+	require.NoError(t, err)
+	client := desc.NewAuthV1Client(conn)
+
+	resp, err := client.Create(context.Background(), &desc.CreateRequest{
+		Info: &desc.AuthInfo{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(123), resp.GetId())
+}
+
+==== ./internal/app/service_provider.go ====
+package app
+
+import (
+	"context"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/api/auth"
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+	"github.com/beachrockhotel/auth/internal/client/db/transaction"
+	"github.com/beachrockhotel/auth/internal/closer"
+	"github.com/beachrockhotel/auth/internal/config"
+	"github.com/beachrockhotel/auth/internal/repository"
+	authRepository "github.com/beachrockhotel/auth/internal/repository/auth"
+	"github.com/beachrockhotel/auth/internal/service"
+	authService "github.com/beachrockhotel/auth/internal/service/auth"
+)
+
+type serviceProvider struct {
+	pgConfig      config.PGConfig
+	grpcConfig    config.GRPCConfig
+	httpConfig    config.HTTPConfig
+	swaggerConfig config.SwaggerConfig
+
+	dbClient       db.Client
+	txManager      db.TxManager
+	authRepository repository.AuthRepository
+
+	authService service.AuthService
+
+	authImpl *auth.Implementation
+}
+
+func newServiceProvider() *serviceProvider {
+	return &serviceProvider{}
+}
+
+func (s *serviceProvider) PGConfig() config.PGConfig {
+	if s.pgConfig == nil {
+		cfg, err := config.NewPGConfig()
+		if err != nil {
+			log.Fatalf("failed to get pg config: %s", err.Error())
+		}
+
+		s.pgConfig = cfg
+	}
+
+	return s.pgConfig
+}
+
+func (s *serviceProvider) GRPCConfig() config.GRPCConfig {
+	if s.grpcConfig == nil {
+		cfg, err := config.NewGRPCConfig()
+		if err != nil {
+			log.Fatalf("failed to get grpc config: %s", err.Error())
+		}
+
+		s.grpcConfig = cfg
+	}
+
+	return s.grpcConfig
+}
+
+func (s *serviceProvider) DBClient(ctx context.Context) db.Client {
+	if s.dbClient == nil {
+		cl, err := pg.New(ctx, s.PGConfig().DSN())
+		if err != nil {
+			log.Fatalf("failed to create db client: %v", err)
+		}
+
+		err = cl.DB().Ping(ctx)
+		if err != nil {
+			log.Fatalf("ping error: %s", err.Error())
+		}
+		closer.Add(cl.Close)
+
+		s.dbClient = cl
+	}
+
+	return s.dbClient
+}
+
+func (s *serviceProvider) TxManager(ctx context.Context) db.TxManager {
+	if s.txManager == nil {
+		s.txManager = transaction.NewTransactionManager(s.DBClient(ctx).DB())
+	}
+
+	return s.txManager
+}
+
+func (s *serviceProvider) AuthRepository(ctx context.Context) repository.AuthRepository {
+	if s.authRepository == nil {
+		s.authRepository = authRepository.NewRepository(s.DBClient(ctx))
+	}
+
+	return s.authRepository
+}
+
+func (s *serviceProvider) AuthService(ctx context.Context) service.AuthService {
+	if s.authService == nil {
+		s.authService = authService.NewService(
+			s.AuthRepository(ctx),
+			s.TxManager(ctx),
+		)
+	}
+
+	return s.authService
+}
+
+func (s *serviceProvider) AuthImpl(ctx context.Context) *auth.Implementation {
+	if s.authImpl == nil {
+		s.authImpl = auth.NewImplementation(s.AuthService(ctx))
+	}
+
+	return s.authImpl
+}
+
+func (s *serviceProvider) HTTPConfig() config.HTTPConfig {
+	if s.httpConfig == nil {
+		cfg, err := config.NewHTTPConfig()
+		if err != nil {
+			log.Fatalf("failed to get http config: %s", err.Error())
+		}
+
+		s.httpConfig = cfg
+	}
+
+	return s.httpConfig
+}
+
+func (s *serviceProvider) SwaggerConfig() config.SwaggerConfig {
+	if s.swaggerConfig == nil {
+		cfg, err := config.NewSwaggerConfig()
+		if err != nil {
+			log.Fatalf("failed to get swagger config: %s", err.Error())
+		}
+		s.swaggerConfig = cfg
+	}
+	return s.swaggerConfig
+}
+
+==== ./internal/app/app.go ====
+package app
+
+import (
+	"context"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"sync"
+
+	"github.com/rs/cors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/reflection"
+
+	"github.com/beachrockhotel/auth/internal/closer"
+	"github.com/beachrockhotel/auth/internal/config"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	_ "github.com/beachrockhotel/auth/statik"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rakyll/statik/fs"
+)
+
+type App struct {
+	serviceProvider *serviceProvider
+	grpcServer      *grpc.Server
+	httpServer      *http.Server
+	swaggerServer   *http.Server
+}
+
+// NewApp создаёт и инициализирует все зависимости
+func NewApp(ctx context.Context) (*App, error) {
+	a := &App{}
+
+	if err := a.initDeps(ctx); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+// Run запускает GRPC и HTTP серверы параллельно
+func (a *App) Run() error {
+	defer func() {
+		closer.CloseAll()
+		closer.Wait()
+	}()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := a.runGRPCServer(); err != nil {
+			log.Fatalf("failed to run GRPC server: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if err := a.runHTTPServer(); err != nil {
+			log.Fatalf("failed to run HTTP server: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		err := a.runSwaggerServer()
+		if err != nil {
+			log.Fatalf("failed to run Swagger server: %v", err)
+		}
+	}()
+
+	wg.Wait()
+	return nil
+}
+
+// initDeps инициализирует все зависимости по порядку
+func (a *App) initDeps(ctx context.Context) error {
+	inits := []func(context.Context) error{
+		a.initConfig,
+		a.initServiceProvider,
+		a.initGRPCServer,
+		a.initHTTPServer,
+		a.initSwaggerServer,
+	}
+
+	for _, f := range inits {
+		if err := f(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *App) initConfig(_ context.Context) error {
+	return config.Load(".env")
+}
+
+func (a *App) initServiceProvider(_ context.Context) error {
+	a.serviceProvider = newServiceProvider()
+	return nil
+}
+
+func (a *App) initGRPCServer(ctx context.Context) error {
+	a.grpcServer = grpc.NewServer(grpc.Creds(insecure.NewCredentials()))
+	reflection.Register(a.grpcServer)
+	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
+	return nil
+}
+
+func (a *App) initHTTPServer(ctx context.Context) error {
+	mux := runtime.NewServeMux()
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	}
+
+	err := desc.RegisterAuthV1HandlerFromEndpoint(
+		ctx,
+		mux,
+		a.serviceProvider.GRPCConfig().Address(),
+		opts,
+	)
+	if err != nil {
+		return err
+	}
+
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Content-Length", "Authorization"},
+		AllowCredentials: true,
+	})
+
+	a.httpServer = &http.Server{
+		Addr:    a.serviceProvider.HTTPConfig().Address(),
+		Handler: corsMiddleware.Handler(mux),
+	}
+
+	return nil
+}
+
+func (a *App) initSwaggerServer(_ context.Context) error {
+	statikFs, err := fs.New()
+	if err != nil {
+		return err
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", http.StripPrefix("/", http.FileServer(statikFs)))
+	mux.HandleFunc("/api.swagger.json", serveSwaggerFile("api.swagger.json"))
+
+	a.swaggerServer = &http.Server{
+		Addr:    a.serviceProvider.SwaggerConfig().Address(),
+		Handler: mux,
+	}
+
+	return nil
+}
+
+func (a *App) runGRPCServer() error {
+	addr := a.serviceProvider.GRPCConfig().Address()
+	log.Printf("GRPC server is running on %s", addr)
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	return a.grpcServer.Serve(listener)
+}
+
+func (a *App) runHTTPServer() error {
+	addr := a.serviceProvider.HTTPConfig().Address()
+	log.Printf("HTTP server is running on %s", addr)
+
+	return a.httpServer.ListenAndServe()
+}
+
+func (a *App) runSwaggerServer() error {
+	addr := a.serviceProvider.SwaggerConfig().Address()
+	log.Printf("Swagger server is running on %s", addr)
+
+	return a.swaggerServer.ListenAndServe()
+}
+
+func serveSwaggerFile(path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		log.Printf("Serving swagger file: %s", path)
+
+		statikFs, err := fs.New()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error creating statik FS: %v", err)
+			return
+		}
+
+		file, err := statikFs.Open(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error opening swagger file: %v", err)
+			return
+		}
+		defer file.Close()
+
+		content, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error reading swagger file: %v", err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write(content)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			log.Printf("Error writing swagger file: %v", err)
+			return
+		}
+
+		log.Printf("Successfully served swagger file: %s", path)
+	}
+}
+
+==== ./internal/config/pg.go ====
+package config
+
+import (
+	"errors"
+	"os"
+)
+
+const (
+	dsnEnvName = "PG_DSN"
+)
+
+type PGConfig interface {
+	DSN() string
+}
+
+type pgConfig struct {
+	dsn string
+}
+
+func NewPGConfig() (PGConfig, error) {
+	dsn := os.Getenv(dsnEnvName)
+	if len(dsn) == 0 {
+		return nil, errors.New("pg dsn not found")
+	}
+
+	return &pgConfig{
+		dsn: dsn,
+	}, nil
+}
+
+func (cfg *pgConfig) DSN() string {
+	return cfg.dsn
+}
+
+==== ./internal/config/swagger.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	swaggerHostEnvName = "SWAGGER_HOST"
+	swaggerPortEnvName = "SWAGGER_PORT"
+)
+
+type SwaggerConfig interface {
+	Address() string
+}
+
+type swaggerConfig struct {
+	host string
+	port string
+}
+
+func NewSwaggerConfig() (SwaggerConfig, error) {
+	host := os.Getenv(swaggerHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("swagger host not found")
+	}
+
+	port := os.Getenv(swaggerPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("swagger port not found")
+	}
+
+	return &swaggerConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *swaggerConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./internal/config/http.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	httpHostEnvName = "HTTP_HOST"
+	httpPortEnvName = "HTTP_PORT"
+)
+
+type HTTPConfig interface {
+	Address() string
+}
+
+type httpConfig struct {
+	host string
+	port string
+}
+
+func NewHTTPConfig() (HTTPConfig, error) {
+	host := os.Getenv(httpHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("http host not found")
+	}
+
+	port := os.Getenv(httpPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("http port not found")
+	}
+
+	return &httpConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *httpConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./internal/config/config.go ====
+package config
+
+import (
+	"github.com/joho/godotenv"
+)
+
+func Load(path string) error {
+	err := godotenv.Load(path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+==== ./internal/config/grpc.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	grpcHostEnvName = "GRPC_HOST"
+	grpcPortEnvName = "GRPC_PORT"
+)
+
+type GRPCConfig interface {
+	Address() string
+}
+
+type grpcConfig struct {
+	host string
+	port string
+}
+
+func NewGRPCConfig() (GRPCConfig, error) {
+	host := os.Getenv(grpcHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("grpc host not found")
+	}
+
+	port := os.Getenv(grpcPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("grpc port not found")
+	}
+
+	return &grpcConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *grpcConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./sources_dump.txt ====
+
+==== ./Dockerfile ====
+FROM golang:1.20.3-alpine AS builder
+
+WORKDIR /app
+COPY --from=builder /app/bin/crud_server .
+
+RUN go mod download
+RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
+
+FROM alpine:latest
+
+WORKDIR /root/
+COPY --from=builder /github.com/beachrockhotel/auth/source/bin/crud_server .
+
+CMD ["./crud_server"]
+==== ./migration.sh ====
+#!/bin/bash
+source .env
+
+export MIGRATION_DSN="host=pg port=5432 dbname=$PG_DATABASE_NAME user=$PG_USER password=$PG_PASSWORD sslmode=disable"
+
+sleep 2 && goose -dir "${MIGRATION_DIR}" postgres ${MIGRATION_DSN}" up -v
+==== ./migrations/20250210214645_create_auth_table.sql ====
+-- +goose Up
+CREATE TABLE auth (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    role INTEGER DEFAULT 1,
+    password TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NULL DEFAULT NULL
+);
+-- +goose Down
+DROP TABLE auth;
+==== ./.github/workflows/ci.yaml ====
+name: CI
+
+on:
+    push:
+        branches: [ main, master ]
+    pull_request:
+        branches: [ main, master ]
+
+env:
+  REGISTRY: "cr.selcloud.ru/beachrockhotel"
+  IMAGE_NAME: "crud-server"
+  CONTAINER_NAME: "crud-server-container"
+
+jobs:
+  image-build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Registry
+        run: docker login -u ${{ secrets.REGISTRY_USERNAME }} -p ${{ secrets.REGISTRY_PASSWORD }} $REGISTRY
+
+      - name: Build and Push Docker Image
+        run: |
+          TAG_NAME=$(echo $GITHUB_SHA | head -c7)
+          docker buildx create --use
+          docker buildx build --no-cache --push --tag $REGISTRY/$IMAGE_NAME:$TAG_NAME -f grpc/Dockerfile grpc/
+
+  deploy-image:
+    runs-on: ubuntu-latest
+    needs: image-build-and-push
+
+    steps:
+      - name: Deploy to Selectel Cloud via SSH action
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSHKEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: IMAGE_NAME,REGISTRY,GITHUB_SHA,CONTAINER_NAME
+          script: |
+            # Set up variables
+            TAG_NAME=$(echo $GITHUB_SHA | head -c7)
+            
+            # Login into Selectel Registry
+            docker login -u ${{ secrets.REGISTRY_USERNAME }} -p ${{ secrets.REGISTRY_PASSWORD }} $REGISTRY
+            
+            # Stop running container
+            docker stop $CONTAINER_NAME
+            
+            # Remove old container
+            docker rm $CONTAINER_NAME
+            
+            # Run a new container from a new image
+            docker run -d -p 50051:50051 --name $CONTAINER_NAME -t $REGISTRY/$IMAGE_NAME:$TAG_NAME
+==== ./api/auth_v1/auth.proto ====
+syntax = "proto3";
+
+package auth_v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/beachrockhotel/auth/pkg/auth_v1;auth_v1";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Auth API"
+    version: "1.0.0"
+    contact: {
+      name: "Dmitriy Komarov"
+      email: "300@gmail.com"
+    };
+  };
+
+  host: "localhost:8080",
+  schemes: HTTP,
+  schemes: HTTPS,
+  consumes: "application/json",
+  produces: "application/json",
+};
+
+
+service AuthV1 {
+  // Создает нового пользователя
+  rpc Create(CreateRequest) returns (CreateResponse){
+    option (google.api.http) = {
+      post: "/auth/v1/create"
+      body: "*"
+    };
+  }
+  rpc Get(GetRequest) returns (GetResponse){
+    option (google.api.http) = {
+      get: "/auth/v1"
+    };
+  }
+  rpc Update(UpdateRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      patch: "/auth/v1"
+      body: "*"
+    };
+  }
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      delete: "/auth/v1"
+    };
+  }
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+message AuthInfo {
+  // Имя пользователя
+  string name = 1;
+  // Email пользователя
+  string email = 2;
+  // Роль пользователя
+  Role role = 3;
+  string password = 4;
+}
+
+message CreateRequest {
+  AuthInfo info = 1;
+}
+
+message CreateResponse {
+  int64 id = 1;
+}
+
+message GetRequest {
+  int64 id = 1;
+}
+
+message Auth {
+  int64 id = 1;
+  AuthInfo info = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message GetResponse {
+  Auth auth = 1;
+}
+
+message UpdateRequest {
+  int64 id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue email = 3;
+}
+
+message DeleteRequest {
+  int64 id = 1;
+}
+==== ./migration.Dockerfile ====
+FROM alpine:3.13
+
+RUN apk update && \
+    apk upgrade && \
+    apk add bash && \
+    rm -rf /var/cache/apk/*
+
+ADD https://github.com/pressly/goose/releases/download/v3.14.0/goose_linux_x86_64 /bin/goose
+RUN chmod +x /bin/goose
+
+WORKDIR /root
+
+ADD migrations/*.sql migrations/
+ADD migration.sh .
+ADD .env .
+
+RUN chmod +x migration.sh
+
+ENTRYPOINT ["bash", "migration.sh"]
+
+==== ./.env ====
+POSTGRES_DB=auth
+POSTGRES_USER=auth-user
+POSTGRES_PASSWORD=auth-password
+MIGRATION_DIR=./migrations
+
+PG_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
+PG_PORT=54321
+
+LOCAL_MIGRATION_DIR=./migrations
+LOCAL_MIGRATION_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
+
+GRPC_HOST=localhost
+GRPC_PORT=50051
+
+HTTP_HOST=localhost
+HTTP_PORT=8081
+
+SWAGGER_HOST=localhost
+SWAGGER_PORT=8090
+==== ./cmd/grpc_server/main.go ====
+package main
+
+import (
+	"context"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/app"
+)
+
+func main() {
+	ctx := context.Background()
+
+	a, err := app.NewApp(ctx)
+	if err != nil {
+		log.Fatalf("failed to init app: %s", err.Error())
+	}
+
+	err = a.Run()
+	if err != nil {
+		log.Fatalf("failed to run app: %s", err.Error())
+	}
+}
+
+==== ./docker-compose.yaml ====
+version: '3'
+
+volumes:
+  postgres_volume:
+
+services:
+  pg-local:
+    image: postgres:14-alpine3.17
+    env_file:
+      - .env
+    ports:
+      - "54321:5432"
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
