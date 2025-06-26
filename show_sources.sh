@@ -5,7 +5,7 @@ OUTPUT_FILE="sources_dump.txt"
 > "$OUTPUT_FILE"  # Очистить файл перед началом
 
 # Каталоги и шаблоны, которые надо исключить
-EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik")
+EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik" "pkg/access_v1" "pkg/auth_v1")
 EXCLUDE_FILES=("go.mod" "go.sum" "service.csr" "service.key" "service.pem" "ca.cert" "ca.key" "ca.srl")
 EXCLUDE_PATTERNS=("*.pb.go" "*.pb" "*.exe" "*.so" "*.out" "*.a")
 

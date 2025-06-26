@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
 	"io"
 	"log"
 	"net"
@@ -120,6 +121,7 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 	a.grpcServer = grpc.NewServer(grpc.Creds(creds))
 	reflection.Register(a.grpcServer)
 	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
+	descAccess.RegisterAccessV1Server(a.grpcServer, a.serviceProvider.AccessImpl(ctx))
 	return nil
 }
 

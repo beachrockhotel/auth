@@ -53,6 +53,10 @@ service AuthV1 {
       delete: "/auth/v1"
     };
   }
+
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc GetRefreshToken (GetRefreshTokenRequest) returns (GetRefreshTokenResponse);
+  rpc GetAccessToken (GetAccessTokenRequest) returns (GetAccessTokenResponse);
 }
 
 enum Role {
@@ -102,4 +106,29 @@ message UpdateRequest {
 
 message DeleteRequest {
   int64 id = 1;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenResponse {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenResponse {
+  string access_token = 1;
 }

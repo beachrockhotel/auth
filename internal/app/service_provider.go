@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	accessAPI "github.com/beachrockhotel/auth/internal/api/access"
 	"github.com/beachrockhotel/auth/internal/api/auth"
 	"github.com/beachrockhotel/auth/internal/client/db"
 	"github.com/beachrockhotel/auth/internal/client/db/pg"
@@ -14,6 +15,7 @@ import (
 	authRepository "github.com/beachrockhotel/auth/internal/repository/auth"
 	"github.com/beachrockhotel/auth/internal/service"
 	authService "github.com/beachrockhotel/auth/internal/service/auth"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
 )
 
 type serviceProvider struct {
@@ -46,6 +48,10 @@ func (s *serviceProvider) PGConfig() config.PGConfig {
 	}
 
 	return s.pgConfig
+}
+
+func (s *serviceProvider) AccessImpl(ctx context.Context) descAccess.AccessV1Server {
+	return accessAPI.NewImplementation()
 }
 
 func (s *serviceProvider) GRPCConfig() config.GRPCConfig {

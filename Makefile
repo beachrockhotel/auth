@@ -18,7 +18,9 @@ get-deps:
 build:
 	GOOS=linux GOARCH=amd64 go build -o service_linux cmd/grpc_server/main.go
 
-generate: generate-auth-api
+generate:
+	make generate-auth-api
+	make generate-access-api
 
 generate-auth-api:
 	@mkdir -p pkg/auth_v1
@@ -36,6 +38,15 @@ generate-auth-api:
 		api/auth_v1/auth.proto
 	@test -f pkg/swagger/api.swagger.json || (echo "Swagger JSON not found!"; exit 1)
 	@$(MAKE) generate-statik
+
+generate-access-api:
+	mkdir -p pkg/access_v1
+	protoc --proto_path api/access_v1 \
+	--go_out=pkg/access_v1 --go_opt=paths=source_relative \
+	--plugin=protoc-gen-go=bin/protoc-gen-go \
+	--go-grpc_out=pkg/access_v1 --go-grpc_opt=paths=source_relative \
+	--plugin=protoc-gen-go-grpc=bin/protoc-gen-go-grpc \
+	api/access_v1/access.proto
 
 gen-cert:
 	openssl genrsa -out ca.key 4096
