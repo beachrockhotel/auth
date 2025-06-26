@@ -2,12 +2,11 @@ package auth
 
 import (
 	"context"
-	"strings"
 	"time"
 
+	"github.com/beachrockhotel/auth/internal/model"
 	"github.com/beachrockhotel/auth/internal/utils"
 	"github.com/beachrockhotel/auth/pkg/auth_v1"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
