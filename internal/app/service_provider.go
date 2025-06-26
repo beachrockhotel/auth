@@ -11,13 +11,11 @@ import (
 	"github.com/beachrockhotel/auth/internal/client/db/transaction"
 	"github.com/beachrockhotel/auth/internal/closer"
 	"github.com/beachrockhotel/auth/internal/config"
-	"github.com/beachrockhotel/auth/internal/logger"
 	"github.com/beachrockhotel/auth/internal/repository"
 	authRepository "github.com/beachrockhotel/auth/internal/repository/auth"
 	"github.com/beachrockhotel/auth/internal/service"
 	authService "github.com/beachrockhotel/auth/internal/service/auth"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
-	"go.uber.org/zap"
 )
 
 type serviceProvider struct {

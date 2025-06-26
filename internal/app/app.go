@@ -25,9 +25,6 @@ import (
 	"crypto/tls"
 	"google.golang.org/grpc/credentials"
 
-	"go.uber.org/zap/zapcore"
-
-	"github.com/beachrockhotel/auth/internal/app"
 	"github.com/beachrockhotel/auth/internal/logger"
 )
 
