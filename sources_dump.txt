@@ -168,7 +168,6 @@ vendor-proto:
 		mv vendor.protogen/openapiv2/protoc-gen-openapiv2/options/*.proto vendor.protogen/protoc-gen-openapiv2/options &&\
 		rm -rf vendor.protogen/openapiv2 ;\
 	fi
-
 ==== ./.gitignore ====
 .idea
 bin/
@@ -744,6 +743,47 @@ type UserClaims struct {
 	Role auth_v1.Role `json:"role"`
 }
 
+==== ./internal/logger/logger.go ====
+package logger
+
+import (
+	"os"
+
+	"github.com/natefinch/lumberjack"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+var globalLogger *zap.Logger
+
+func Init(core zapcore.Core, options ...zap.Option) {
+	globalLogger = zap.New(core, options...)
+}
+
+func InitDefault(logLevel zapcore.Level) {
+	stdout := zapcore.AddSync(os.Stdout)
+	file := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   "logs/app.log",
+		MaxSize:    10, // MB
+		MaxBackups: 3,
+		MaxAge:     7, // days
+	})
+
+	productionCfg := zap.NewProductionEncoderConfig()
+	productionCfg.TimeKey = "timestamp"
+	productionCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	consoleEncoder := zapcore.NewConsoleEncoder(productionCfg)
+	fileEncoder := zapcore.NewJSONEncoder(productionCfg)
+
+	core := zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, stdout, logLevel),
+		zapcore.NewCore(fileEncoder, file, logLevel),
+	)
+
+	Init(core)
+}
+
 ==== ./internal/service/service.go ====
 package service
 
@@ -1134,12 +1174,11 @@ package auth
 
 import (
 	"context"
-	"strings"
 	"time"
 
+	"github.com/beachrockhotel/auth/internal/model"
 	"github.com/beachrockhotel/auth/internal/utils"
 	"github.com/beachrockhotel/auth/pkg/auth_v1"
-	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -1347,11 +1386,13 @@ import (
 	"github.com/beachrockhotel/auth/internal/client/db/transaction"
 	"github.com/beachrockhotel/auth/internal/closer"
 	"github.com/beachrockhotel/auth/internal/config"
+	"github.com/beachrockhotel/auth/internal/logger"
 	"github.com/beachrockhotel/auth/internal/repository"
 	authRepository "github.com/beachrockhotel/auth/internal/repository/auth"
 	"github.com/beachrockhotel/auth/internal/service"
 	authService "github.com/beachrockhotel/auth/internal/service/auth"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+	"go.uber.org/zap"
 )
 
 type serviceProvider struct {
@@ -1487,6 +1528,7 @@ package app
 import (
 	"context"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+	"go.uber.org/zap"
 	"io"
 	"log"
 	"net"
@@ -1507,6 +1549,11 @@ import (
 
 	"crypto/tls"
 	"google.golang.org/grpc/credentials"
+
+	"go.uber.org/zap/zapcore"
+
+	"github.com/beachrockhotel/auth/internal/app"
+	"github.com/beachrockhotel/auth/internal/logger"
 )
 
 type App struct {
@@ -1665,7 +1712,7 @@ func (a *App) initSwaggerServer(_ context.Context) error {
 
 func (a *App) runGRPCServer() error {
 	addr := a.serviceProvider.GRPCConfig().Address()
-	log.Printf("GRPC server is running on %s", addr)
+	logger.Info("GRPC server is running", zap.String("addr", addr))
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -1677,7 +1724,7 @@ func (a *App) runGRPCServer() error {
 
 func (a *App) runHTTPServer() error {
 	addr := a.serviceProvider.HTTPConfig().Address()
-	log.Printf("HTTP server is running on %s", addr)
+	logger.Info("HTTP server is running", zap.String("addr", addr))
 
 	return a.httpServer.ListenAndServe()
 
@@ -1685,19 +1732,19 @@ func (a *App) runHTTPServer() error {
 
 func (a *App) runSwaggerServer() error {
 	addr := a.serviceProvider.SwaggerConfig().Address()
-	log.Printf("Swagger server is running on %s", addr)
+	logger.Info("Swagger server is running", zap.String("addr", addr))
 
 	return a.swaggerServer.ListenAndServe()
 }
 
 func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Serving swagger file: %s", path)
+		logger.Info("Serving swagger file", zap.String("path", path))
 
 		file, err := fs.Open(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error opening swagger file: %v", err)
+			logger.Error("Error opening swagger file", zap.Error(err))
 			return
 		}
 		defer file.Close()
@@ -1705,7 +1752,7 @@ func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 		content, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error reading swagger file: %v", err)
+			logger.Error("Error reading swagger file", zap.Error(err))
 			return
 		}
 
@@ -1713,12 +1760,61 @@ func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 		_, err = w.Write(content)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error writing swagger file: %v", err)
+			logger.Error("Error writing swagger response", zap.Error(err))
 			return
 		}
 
-		log.Printf("Successfully served swagger file: %s", path)
+		logger.Info("Successfully served swagger file", zap.String("path", path))
 	}
+}
+
+==== ./internal/interceptor/validate.go ====
+package interceptor
+
+import (
+	"context"
+
+	"google.golang.org/grpc"
+)
+
+type validator interface {
+	Validate() error
+}
+
+func ValidateInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if val, ok := req.(validator); ok {
+		if err := val.Validate(); err != nil {
+			return nil, err
+		}
+	}
+
+	return handler(ctx, req)
+}
+
+==== ./internal/interceptor/logger.go ====
+package interceptor
+
+import (
+	"context"
+	"time"
+
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	"github.com/beachrockhotel/auth/internal/logger"
+)
+
+func LogInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	now := time.Now()
+
+	res, err := handler(ctx, req)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("method", info.FullMethod), zap.Any("req", req))
+	}
+
+	logger.Info("request", zap.String("method", info.FullMethod), zap.Any("req", req), zap.Any("res", res), zap.Duration("duration", time.Since(now)))
+
+	return res, err
 }
 
 ==== ./internal/config/pg.go ====
@@ -2158,10 +2254,6 @@ service AccessV1 {
 message CheckRequest {
   string endpoint_address = 1;
 }
-
-message CheckResponse {
-  bool is_allowed = 1;
-}
 ==== ./migration.Dockerfile ====
 FROM alpine:3.13
 
@@ -2203,17 +2295,68 @@ HTTP_PORT=8080
 
 SWAGGER_HOST=localhost
 SWAGGER_PORT=8090
+==== ./cmd/grpc_client/main.go ====
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+)
+
+var accessToken = flag.String("a", "", "access token")
+
+const servicePort = 50051
+
+func main() {
+	flag.Parse()
+
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"Authorization": "Bearer " + *accessToken})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	conn, err := grpc.Dial(
+		fmt.Sprintf(":%d", servicePort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Fatalf("failed to dial GRPC client: %v", err)
+	}
+
+	cl := descAccess.NewAccessV1Client(conn)
+
+	_, err = cl.Check(ctx, &descAccess.CheckRequest{
+		EndpointAddress: model.ExamplePath,
+	})
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	fmt.Println("Access granted")
+}
+
 ==== ./cmd/grpc_server/main.go ====
 package main
 
 import (
 	"context"
+	"github.com/beachrockhotel/auth/internal/logger"
+	"go.uber.org/zap/zapcore"
 	"log"
 
 	"github.com/beachrockhotel/auth/internal/app"
 )
 
 func main() {
+	logger.InitDefault(zapcore.InfoLevel)
 	ctx := context.Background()
 
 	a, err := app.NewApp(ctx)

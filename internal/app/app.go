@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+	"go.uber.org/zap"
 	"io"
 	"log"
 	"net"
@@ -23,6 +24,11 @@ import (
 
 	"crypto/tls"
 	"google.golang.org/grpc/credentials"
+
+	"go.uber.org/zap/zapcore"
+
+	"github.com/beachrockhotel/auth/internal/app"
+	"github.com/beachrockhotel/auth/internal/logger"
 )
 
 type App struct {
@@ -181,7 +187,7 @@ func (a *App) initSwaggerServer(_ context.Context) error {
 
 func (a *App) runGRPCServer() error {
 	addr := a.serviceProvider.GRPCConfig().Address()
-	log.Printf("GRPC server is running on %s", addr)
+	logger.Info("GRPC server is running", zap.String("addr", addr))
 
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -193,7 +199,7 @@ func (a *App) runGRPCServer() error {
 
 func (a *App) runHTTPServer() error {
 	addr := a.serviceProvider.HTTPConfig().Address()
-	log.Printf("HTTP server is running on %s", addr)
+	logger.Info("HTTP server is running", zap.String("addr", addr))
 
 	return a.httpServer.ListenAndServe()
 
@@ -201,19 +207,19 @@ func (a *App) runHTTPServer() error {
 
 func (a *App) runSwaggerServer() error {
 	addr := a.serviceProvider.SwaggerConfig().Address()
-	log.Printf("Swagger server is running on %s", addr)
+	logger.Info("Swagger server is running", zap.String("addr", addr))
 
 	return a.swaggerServer.ListenAndServe()
 }
 
 func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("Serving swagger file: %s", path)
+		logger.Info("Serving swagger file", zap.String("path", path))
 
 		file, err := fs.Open(path)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error opening swagger file: %v", err)
+			logger.Error("Error opening swagger file", zap.Error(err))
 			return
 		}
 		defer file.Close()
@@ -221,7 +227,7 @@ func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 		content, err := io.ReadAll(file)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error reading swagger file: %v", err)
+			logger.Error("Error reading swagger file", zap.Error(err))
 			return
 		}
 
@@ -229,10 +235,10 @@ func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 		_, err = w.Write(content)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
-			log.Printf("Error writing swagger file: %v", err)
+			logger.Error("Error writing swagger response", zap.Error(err))
 			return
 		}
 
-		log.Printf("Successfully served swagger file: %s", path)
+		logger.Info("Successfully served swagger file", zap.String("path", path))
 	}
 }
