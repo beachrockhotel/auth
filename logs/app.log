@@ -1,3 +1,6 @@
 {"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"Swagger server is running","addr":"localhost:8090"}
 {"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"GRPC server is running","addr":"localhost:50051"}
 {"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"HTTP server is running","addr":"localhost:8080"}

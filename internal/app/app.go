@@ -2,7 +2,9 @@ package app
 
 import (
 	"context"
+	"github.com/beachrockhotel/auth/internal/interceptor"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"io"
 	"log"
@@ -121,9 +123,21 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 		Certificates: []tls.Certificate{cert},
 	})
 
-	a.grpcServer = grpc.NewServer(grpc.Creds(creds))
+	a.grpcServer = grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(interceptor.MetricsInterceptor),
+	)
+
 	reflection.Register(a.grpcServer)
 	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
+
+	go func() {
+		err = runPrometheus()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
 	descAccess.RegisterAccessV1Server(a.grpcServer, a.serviceProvider.AccessImpl(ctx))
 	return nil
 }
@@ -136,7 +150,7 @@ func (a *App) initHTTPServer(ctx context.Context) error {
 	})
 
 	opts := []grpc.DialOption{
-		grpc.WithTransportCredentials(creds), // ✅ используем TLS
+		grpc.WithTransportCredentials(creds),
 	}
 
 	err := desc.RegisterAuthV1HandlerFromEndpoint(
@@ -238,4 +252,23 @@ func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
 
 		logger.Info("Successfully served swagger file", zap.String("path", path))
 	}
+}
+
+func runPrometheus() error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	prometheusServer := &http.Server{
+		Addr:    "localhost:2112",
+		Handler: mux,
+	}
+
+	log.Printf("Prometheus is running on %s", prometheusServer.Addr)
+
+	err := prometheusServer.ListenAndServe()
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
