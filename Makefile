@@ -101,3 +101,25 @@ vendor-proto:
 		mv vendor.protogen/openapiv2/protoc-gen-openapiv2/options/*.proto vendor.protogen/protoc-gen-openapiv2/options &&\
 		rm -rf vendor.protogen/openapiv2 ;\
 	fi
+
+grpc-load-test:
+	cd ghz_tmp && ../bin/ghz \
+		--proto auth_v1/auth.proto \
+		--call auth_v1.AuthV1.Get \
+		--data '{"id": 1}' \
+		--rps 100 \
+		--total 3000 \
+		--cacert ../ca.cert \
+		--cert ../service.pem \
+		--key ../service.key \
+		localhost:50051
+
+grpc-error-load-test:
+	ghz \
+		--proto api/auth_v1/auth.proto \
+		--call auth_v1.AuthV1.Get \
+		--data '{"id": 0}' \
+		--rps 100 \
+		--total 3000 \
+		--insecure \
+		localhost:50051

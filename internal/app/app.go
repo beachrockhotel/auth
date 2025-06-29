@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"github.com/beachrockhotel/auth/internal/interceptor"
+	"github.com/beachrockhotel/auth/internal/metric"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -122,6 +123,11 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 	creds := credentials.NewTLS(&tls.Config{
 		Certificates: []tls.Certificate{cert},
 	})
+
+	err = metric.Init(ctx)
+	if err != nil {
+		return err
+	}
 
 	a.grpcServer = grpc.NewServer(
 		grpc.Creds(creds),
@@ -259,7 +265,7 @@ func runPrometheus() error {
 	mux.Handle("/metrics", promhttp.Handler())
 
 	prometheusServer := &http.Server{
-		Addr:    "localhost:2112",
+		Addr:    "0.0.0.0:2112",
 		Handler: mux,
 	}
 
