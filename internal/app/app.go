@@ -7,6 +7,7 @@ import (
 	"github.com/beachrockhotel/auth/internal/rate_limiter"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sony/gobreaker"
 	"go.uber.org/zap"
 	"io"
 	"log"
@@ -29,6 +30,8 @@ import (
 
 	"crypto/tls"
 	"google.golang.org/grpc/credentials"
+
+	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 
 	"github.com/beachrockhotel/auth/internal/logger"
 )
@@ -133,10 +136,24 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 
 	rateLimiter := rate_limiter.NewTokenBucketLimiter(ctx, 10, time.Second)
 
+	cb := gobreaker.NewCircuitBreaker(gobreaker.Settings{
+		Name:        "my-service",
+		MaxRequests: 3,
+		Timeout:     5 * time.Second,
+		ReadyToTrip: func(counts gobreaker.Counts) bool {
+			failureRatio := float64(counts.TotalFailures) / float64(counts.Requests)
+			return failureRatio >= 0.6
+		},
+		OnStateChange: func(name string, from gobreaker.State, to gobreaker.State) {
+			log.Printf("Circuit Breaker: %s, changed from %v, to %v\n", name, from, to)
+		},
+	})
+
 	a.grpcServer = grpc.NewServer(
 		grpc.Creds(creds),
 		grpc.UnaryInterceptor(
-			grpcMiddleware.ChainUnaryServer(
+			grpc_middleware.ChainUnaryServer(
+				interceptor.NewCircuitBreakerInterceptor(cb).Unary,
 				interceptor.NewRateLimiterInterceptor(rateLimiter).Unary,
 				interceptor.MetricsInterceptor,
 			),
