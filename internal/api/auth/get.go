@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"github.com/pkg/errors"
 	"log"
 
 	"github.com/beachrockhotel/auth/internal/converter"
@@ -9,6 +10,10 @@ import (
 )
 
 func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
+	if req.GetId() == 0 {
+		return nil, errors.Errorf("id is empty")
+	}
+
 	authObj, err := i.authService.Get(ctx, req.GetId())
 	if err != nil {
 		return nil, err

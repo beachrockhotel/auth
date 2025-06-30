@@ -115,11 +115,13 @@ grpc-load-test:
 		localhost:50051
 
 grpc-error-load-test:
-	ghz \
-		--proto api/auth_v1/auth.proto \
+	cd ghz_tmp && ../bin/ghz \
+		--proto auth_v1/auth.proto \
 		--call auth_v1.AuthV1.Get \
 		--data '{"id": 0}' \
 		--rps 100 \
 		--total 3000 \
-		--insecure \
+		--cacert ../ca.cert \
+		--cert ../service.pem \
+		--key ../service.key \
 		localhost:50051

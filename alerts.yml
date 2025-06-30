@@ -1,7 +1,7 @@
 groups:
   - name: alerts
     rules:
-    - alert: TagetIsDown
+    - alert: TargetIsDown
       expr: up == 0
       for: 30s
       labels:

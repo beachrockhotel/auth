@@ -45,7 +45,7 @@ func Init(_ context.Context) error {
 				Subsystem: "grpc",
 				Name:      appName + "_histogram_response_time_seconds",
 				Help:      "Время ответа от сервера",
-				Buckets:   prometheus.ExponentialBuckets(0.0001, 2, 16),
+				Buckets:   prometheus.ExponentialBuckets(0.000001, 2, 16),
 			},
 			[]string{"status"},
 		),
