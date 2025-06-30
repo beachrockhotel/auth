@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/beachrockhotel/auth/internal/interceptor"
 	"github.com/beachrockhotel/auth/internal/metric"
+	"github.com/beachrockhotel/auth/internal/rate_limiter"
 	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -12,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/rs/cors"
 	"google.golang.org/grpc"
@@ -129,9 +131,16 @@ func (a *App) initGRPCServer(ctx context.Context) error {
 		return err
 	}
 
+	rateLimiter := rate_limiter.NewTokenBucketLimiter(ctx, 10, time.Second)
+
 	a.grpcServer = grpc.NewServer(
 		grpc.Creds(creds),
-		grpc.UnaryInterceptor(interceptor.MetricsInterceptor),
+		grpc.UnaryInterceptor(
+			grpcMiddleware.ChainUnaryServer(
+				interceptor.NewRateLimiterInterceptor(rateLimiter).Unary,
+				interceptor.MetricsInterceptor,
+			),
+		),
 	)
 
 	reflection.Register(a.grpcServer)

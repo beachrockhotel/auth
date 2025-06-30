@@ -1,0 +1,3740 @@
+==== ./show_sources.sh ====
+#!/bin/bash
+
+# Выходной файл
+OUTPUT_FILE="sources_dump.txt"
+> "$OUTPUT_FILE"  # Очистить файл перед началом
+
+# Каталоги и шаблоны, которые надо исключить
+EXCLUDE_DIRS=("bin" ".git" ".idea" "vendor.protogen" "pkg/swagger" "statik" "pkg/access_v1" "pkg/auth_v1")
+EXCLUDE_FILES=("go.mod" "go.sum" "service.csr" "service.key" "service.pem" "ca.cert" "ca.key" "ca.srl")
+EXCLUDE_PATTERNS=("*.pb.go" "*.pb" "*.exe" "*.so" "*.out" "*.a")
+
+# Проверка: исключить ли файл по имени
+should_exclude_file() {
+    local filename="$1"
+
+    for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+        if [[ "$filename" == $pattern ]]; then
+            return 0
+        fi
+    done
+
+    for f in "${EXCLUDE_FILES[@]}"; do
+        if [[ "$(basename "$filename")" == "$f" ]]; then
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+# Основной проход по всем файлам
+find . -type f | while read -r file; do
+    # Пропуск исключённых директорий
+    skip_file=0
+    for dir in "${EXCLUDE_DIRS[@]}"; do
+        if [[ "$file" == ./$dir/* ]]; then
+            skip_file=1
+            break
+        fi
+    done
+
+    if [ "$skip_file" -eq 1 ]; then
+        continue
+    fi
+
+    # Пропуск по расширению или имени
+    if should_exclude_file "$file"; then
+        continue
+    fi
+
+    # Убедиться, что это текстовый файл
+    if file "$file" | grep -qvE 'text|ASCII'; then
+        continue
+    fi
+
+    # Запись пути и содержимого в файл
+    {
+        echo "==== $file ===="
+        cat "$file"
+        echo
+    } >> "$OUTPUT_FILE"
+done
+
+echo "Содержимое сохранено в $OUTPUT_FILE"
+
+==== ./Makefile ====
+include .env
+
+LOCAL_BIN=$(CURDIR)/bin
+
+install-deps:
+	@GOBIN=$(LOCAL_BIN) go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.28.1
+	@GOBIN=$(LOCAL_BIN) go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/pressly/goose/v3/cmd/goose@v3.14.0
+	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-grpc-gateway@v2.15.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/grpc-ecosystem/grpc-gateway/v2/protoc-gen-openapiv2@v2.15.2
+	@GOBIN=$(LOCAL_BIN) go install github.com/envoyproxy/protoc-gen-validate@latest
+	@GOBIN=$(LOCAL_BIN) go install github.com/rakyll/statik@latest
+
+get-deps:
+	@go get -u google.golang.org/protobuf/cmd/protoc-gen-go
+	@go get -u google.golang.org/grpc/cmd/protoc-gen-go-grpc
+
+build:
+	GOOS=linux GOARCH=amd64 go build -o service_linux cmd/grpc_server/main.go
+
+generate:
+	make generate-auth-api
+	make generate-access-api
+
+generate-auth-api:
+	@mkdir -p pkg/auth_v1
+	protoc --proto_path=api/auth_v1 --proto_path=vendor.protogen \
+		--go_out=pkg/auth_v1 --go_opt=paths=source_relative \
+		--plugin=protoc-gen-go=$(LOCAL_BIN)/protoc-gen-go \
+		--go-grpc_out=pkg/auth_v1 --go-grpc_opt=paths=source_relative \
+		--plugin=protoc-gen-go-grpc=$(LOCAL_BIN)/protoc-gen-go-grpc \
+		--validate_out=lang=go:pkg/auth_v1 --validate_opt=paths=source_relative \
+		--plugin=protoc-gen-validate=$(LOCAL_BIN)/protoc-gen-validate \
+		--grpc_gateway_out=pkg/auth_v1 --grpc_gateway_opt=paths=source_relative \
+		--plugin=protoc-gen-grpc_gateway=$(LOCAL_BIN)/protoc-gen-grpc-gateway \
+		--openapiv2_out=allow_merge=true,merge_file_name=api:pkg/swagger \
+		--plugin=protoc-gen-openapiv2=$(LOCAL_BIN)/protoc-gen-openapiv2 \
+		api/auth_v1/auth.proto
+	@test -f pkg/swagger/api.swagger.json || (echo "Swagger JSON not found!"; exit 1)
+	@$(MAKE) generate-statik
+
+generate-access-api:
+	mkdir -p pkg/access_v1
+	protoc --proto_path api/access_v1 \
+	--go_out=pkg/access_v1 --go_opt=paths=source_relative \
+	--plugin=protoc-gen-go=bin/protoc-gen-go \
+	--go-grpc_out=pkg/access_v1 --go-grpc_opt=paths=source_relative \
+	--plugin=protoc-gen-go-grpc=bin/protoc-gen-go-grpc \
+	api/access_v1/access.proto
+
+gen-cert:
+	openssl genrsa -out ca.key 4096
+	openssl req -new -x509 -key ca.key -sha256 -subj "/C=US/ST=NJ/O=CA, Inc." -days 365 -out ca.cert
+	openssl genrsa -out service.key 4096
+	openssl req -new -key service.key -out service.csr -config certificate.conf
+	openssl x509 -req -in service.csr -CA ca.cert -CAkey ca.key -CAcreateserial \
+    		-out service.pem -days 365 -sha256 -extfile certificate.conf -extensions req_ext
+
+generate-statik:
+	@$(LOCAL_BIN)/statik -src=pkg/swagger/ -include='*.css,*.html,*.js,*.json,*.png' -f -p statik
+
+re-generate-auth-api:
+	@rm -f pkg/auth_v1/auth*.pb.go
+	@$(MAKE) generate-auth-api
+
+copy-to-server:
+	scp service_linux root@109.71.15.36:
+
+docker-build-and-push:
+	docker buildx build --no-cache --platform linux/amd64 -t cr.selcloud.ru/beachrockhotel/test-server:v0.0.1 .
+	docker login -u token -p CRgAAAAAkL-JL7tX1UmJizGV3dsIj9cYqY7Y0WEq cr.selcloud.ru/beachrockhotel
+	docker push cr.selcloud.ru/beachrockhotel/test-server:v0.0.1
+
+local-migration-status:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" status -v
+
+local-migration-up:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" up -v
+
+local-migration-down:
+	${LOCAL_BIN}/goose -dir ${LOCAL_MIGRATION_DIR} postgres "${LOCAL_MIGRATION_DSN}" down -v
+
+vendor-proto:
+	@if [ ! -d vendor.protogen/validate ]; then \
+		mkdir -p vendor.protogen/validate && \
+		git clone https://github.com/envoyproxy/protoc-gen-validate vendor.protogen/protoc-gen-validate && \
+		mv vendor.protogen/protoc-gen-validate/validate/*.proto vendor.protogen/validate && \
+		rm -rf vendor.protogen/protoc-gen-validate ; \
+	fi
+
+	@if [ ! -d vendor.protogen/google ]; then \
+		git clone https://github.com/googleapis/googleapis vendor.protogen/googleapis && \
+		mkdir -p vendor.protogen/google && \
+		mv vendor.protogen/googleapis/google/api vendor.protogen/google && \
+		rm -rf vendor.protogen/googleapis ; \
+	fi
+
+	@if [ ! -d vendor.protogen/protoc-gen-openapiv2 ]; then \
+		mkdir -p vendor.protogen/protoc-gen-openapiv2/options &&\
+		git clone https://github.com/grpc-ecosystem/grpc-gateway vendor.protogen/openapiv2 &&\
+		mv vendor.protogen/openapiv2/protoc-gen-openapiv2/options/*.proto vendor.protogen/protoc-gen-openapiv2/options &&\
+		rm -rf vendor.protogen/openapiv2 ;\
+	fi
+
+grpc-load-test:
+	cd ghz_tmp && ../bin/ghz \
+		--proto auth_v1/auth.proto \
+		--call auth_v1.AuthV1.Get \
+		--data '{"id": 1}' \
+		--rps 100 \
+		--total 3000 \
+		--cacert ../ca.cert \
+		--cert ../service.pem \
+		--key ../service.key \
+		localhost:50051
+
+grpc-error-load-test:
+	cd ghz_tmp && ../bin/ghz \
+		--proto auth_v1/auth.proto \
+		--call auth_v1.AuthV1.Get \
+		--data '{"id": 0}' \
+		--rps 100 \
+		--total 3000 \
+		--cacert ../ca.cert \
+		--cert ../service.pem \
+		--key ../service.key \
+		localhost:50051
+
+==== ./My Dashboard-1751241274103.json ====
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "d3a688f4-4321-46d9-bf88-07088b2cff56"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*error/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/.*success/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "d3a688f4-4321-46d9-bf88-07088b2cff56"
+          },
+          "editorMode": "code",
+          "expr": "rate(my_space_grpc_my_app_responses_total[5s])",
+          "instant": false,
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Panel Title",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "d3a688f4-4321-46d9-bf88-07088b2cff56"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "yellow",
+            "mode": "fixed"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "d3a688f4-4321-46d9-bf88-07088b2cff56"
+          },
+          "editorMode": "code",
+          "expr": "rate(my_space_grpc_my_app_requests_total[5s])",
+          "instant": false,
+          "legendFormat": "{{label_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Количество входящих запросов",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "My Dashboard",
+  "uid": "f53205ca-8624-4cc0-b93c-fdfc9f470f89",
+  "version": 6,
+  "weekStart": ""
+}
+==== ./.gitignore ====
+.idea
+bin/
+pkg/
+vendor.protogen/
+==== ./internal/converter/auth.go ====
+package converter
+
+import (
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func ToAuthFromService(auth *model.Auth) *desc.Auth {
+	var updatedAt *timestamppb.Timestamp
+	if auth.UpdatedAt.Valid {
+		updatedAt = timestamppb.New(auth.UpdatedAt.Time)
+	}
+
+	return &desc.Auth{
+		Id:        auth.ID,
+		Info:      ToAuthInfoFromService(auth.Info),
+		CreatedAt: timestamppb.New(auth.CreatedAt),
+		UpdatedAt: updatedAt,
+	}
+}
+
+func ToAuthInfoFromService(info model.AuthInfo) *desc.AuthInfo {
+	return &desc.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+func ToAuthInfoFromDesc(info *desc.AuthInfo) *model.AuthInfo {
+	return &model.AuthInfo{
+		Name:     info.Name,
+		Email:    info.Email,
+		Role:     info.Role,
+		Password: info.Password,
+	}
+}
+
+==== ./internal/closer/closer.go ====
+package closer
+
+import (
+	"log"
+	"os"
+	"os/signal"
+	"sync"
+)
+
+var globalCloser = New()
+
+// Add adds `func() error` callback to the globalCloser
+func Add(f ...func() error) {
+	globalCloser.Add(f...)
+}
+
+// Wait ...
+func Wait() {
+	globalCloser.Wait()
+}
+
+// CloseAll ...
+func CloseAll() {
+	globalCloser.CloseAll()
+}
+
+// Closer ...
+type Closer struct {
+	mu    sync.Mutex
+	once  sync.Once
+	done  chan struct{}
+	funcs []func() error
+}
+
+// New returns new Closer, if []os.Signal is specified Closer will automatically call CloseAll when one of signals is received from OS
+func New(sig ...os.Signal) *Closer {
+	c := &Closer{done: make(chan struct{})}
+	if len(sig) > 0 {
+		go func() {
+			ch := make(chan os.Signal, 1)
+			signal.Notify(ch, sig...)
+			<-ch
+			signal.Stop(ch)
+			c.CloseAll()
+		}()
+	}
+	return c
+}
+
+// Add func to closer
+func (c *Closer) Add(f ...func() error) {
+	c.mu.Lock()
+	c.funcs = append(c.funcs, f...)
+	c.mu.Unlock()
+}
+
+// Wait blocks until all closer functions are done
+func (c *Closer) Wait() {
+	<-c.done
+}
+
+// CloseAll calls all closer functions
+func (c *Closer) CloseAll() {
+	c.once.Do(func() {
+		defer close(c.done)
+
+		c.mu.Lock()
+		funcs := c.funcs
+		c.funcs = nil
+		c.mu.Unlock()
+
+		// call all Closer funcs async
+		errs := make(chan error, len(funcs))
+		for _, f := range funcs {
+			go func(f func() error) {
+				errs <- f()
+			}(f)
+		}
+
+		for i := 0; i < cap(errs); i++ {
+			if err := <-errs; err != nil {
+				log.Println("error returned from Closer")
+			}
+		}
+	})
+}
+
+==== ./internal/utils/token.go ====
+package utils
+
+import (
+	"time"
+
+	"github.com/dgrijalva/jwt-go"
+	"github.com/pkg/errors"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func GenerateToken(info model.AuthInfo, secretKey []byte, duration time.Duration) (string, error) {
+	claims := model.UserClaims{
+		StandardClaims: jwt.StandardClaims{
+			ExpiresAt: time.Now().Add(duration).Unix(),
+		},
+		Name: info.Name,
+		Role: info.Role,
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	return token.SignedString(secretKey)
+}
+
+func VerifyToken(tokenStr string, secretKey []byte) (*model.UserClaims, error) {
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&model.UserClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.Errorf("unexpected token signing method")
+			}
+			return secretKey, nil
+		},
+	)
+	if err != nil {
+		return nil, errors.Errorf("invalid token: %s", err.Error())
+	}
+
+	claims, ok := token.Claims.(*model.UserClaims)
+	if !ok || !token.Valid {
+		return nil, errors.Errorf("invalid token claims")
+	}
+
+	return claims, nil
+}
+
+==== ./internal/utils/utils.go ====
+package utils
+
+import "golang.org/x/crypto/bcrypt"
+
+func VerifyPassword(hashedPassword string, candidatePassword string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hashedPassword), []byte(candidatePassword))
+	return err == nil
+}
+
+==== ./internal/client/db/transaction/transaction.go ====
+package transaction
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5"
+
+	"github.com/pkg/errors"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+)
+
+type manager struct {
+	db db.Transactor
+}
+
+// NewTransactionManager создает новый менеджер транзакций, который удовлетворяет интерфейсу db.TxManager
+func NewTransactionManager(db db.Transactor) db.TxManager {
+	return &manager{
+		db: db,
+	}
+}
+
+// transaction основная функция, которая выполняет указанный пользователем обработчик в транзакции
+func (m *manager) transaction(ctx context.Context, opts pgx.TxOptions, fn db.Handler) (err error) {
+	// Если это вложенная транзакция, пропускаем инициацию новой транзакции и выполняем обработчик.
+	tx, ok := ctx.Value(pg.TxKey).(pgx.Tx)
+	if ok {
+		return fn(ctx)
+	}
+
+	// Стартуем новую транзакцию.
+	tx, err = m.db.BeginTx(ctx, opts)
+	if err != nil {
+		return errors.Wrap(err, "can't begin transaction")
+	}
+
+	// Кладем транзакцию в контекст.
+	ctx = pg.MakeContextTx(ctx, tx)
+
+	// Настраиваем функцию отсрочки для отката или коммита транзакции.
+	defer func() {
+		// восстанавливаемся после паники
+		if r := recover(); r != nil {
+			err = errors.Errorf("panic recovered: %v", r)
+		}
+
+		// откатываем транзакцию, если произошла ошибка
+		if err != nil {
+			if errRollback := tx.Rollback(ctx); errRollback != nil {
+				err = errors.Wrapf(err, "errRollback: %v", errRollback)
+			}
+
+			return
+		}
+
+		// если ошибок не было, коммитим транзакцию
+		if nil == err {
+			err = tx.Commit(ctx)
+			if err != nil {
+				err = errors.Wrap(err, "tx commit failed")
+			}
+		}
+	}()
+
+	// Выполните код внутри транзакции.
+	// Если функция терпит неудачу, возвращаем ошибку, и функция отсрочки выполняет откат
+	// или в противном случае транзакция коммитится.
+	if err = fn(ctx); err != nil {
+		err = errors.Wrap(err, "failed executing code inside transaction")
+	}
+
+	return err
+}
+
+func (m *manager) ReadCommitted(ctx context.Context, f db.Handler) error {
+	txOpts := pgx.TxOptions{IsoLevel: pgx.ReadCommitted}
+	return m.transaction(ctx, txOpts, f)
+}
+
+==== ./internal/client/db/pg/client.go ====
+package pg
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/pkg/errors"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+)
+
+type pgClient struct {
+	masterDBC db.DB
+}
+
+func New(ctx context.Context, dsn string) (db.Client, error) {
+	config, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to parse config")
+	}
+
+	dbc, err := pgxpool.NewWithConfig(ctx, config)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to create pool")
+	}
+
+	return &pgClient{
+		masterDBC: &pg{dbc: dbc},
+	}, nil
+}
+
+func (c *pgClient) DB() db.DB {
+	return c.masterDBC
+}
+
+func (c *pgClient) Close() error {
+	if c.masterDBC != nil {
+		c.masterDBC.Close()
+	}
+
+	return nil
+}
+
+==== ./internal/client/db/pg/pg.go ====
+package pg
+
+import (
+	"context"
+	"fmt"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"log"
+
+	"github.com/georgysavva/scany/v2/pgxscan"
+	"github.com/jackc/pgx/v5/pgconn"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/prettier"
+)
+
+type key string
+
+const (
+	TxKey key = "tx"
+)
+
+type pg struct {
+	dbc *pgxpool.Pool
+}
+
+func NewDB(dbc *pgxpool.Pool) db.DB {
+	return &pg{
+		dbc: dbc,
+	}
+}
+
+func (p *pg) ScanOneContext(ctx context.Context, dest interface{}, q db.Query, args ...interface{}) error {
+	logQuery(ctx, q, args...)
+
+	row, err := p.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	return pgxscan.ScanOne(dest, row)
+}
+
+func (p *pg) ScanAllContext(ctx context.Context, dest interface{}, q db.Query, args ...interface{}) error {
+	logQuery(ctx, q, args...)
+
+	rows, err := p.QueryContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	return pgxscan.ScanAll(dest, rows)
+}
+
+func (p *pg) ExecContext(ctx context.Context, q db.Query, args ...interface{}) (pgconn.CommandTag, error) {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.Exec(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.Exec(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) QueryContext(ctx context.Context, q db.Query, args ...interface{}) (pgx.Rows, error) {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.Query(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.Query(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) QueryRowContext(ctx context.Context, q db.Query, args ...interface{}) pgx.Row {
+	logQuery(ctx, q, args...)
+
+	tx, ok := ctx.Value(TxKey).(pgx.Tx)
+	if ok {
+		return tx.QueryRow(ctx, q.QueryRaw, args...)
+	}
+
+	return p.dbc.QueryRow(ctx, q.QueryRaw, args...)
+}
+
+func (p *pg) BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error) {
+	return p.dbc.BeginTx(ctx, txOptions)
+}
+
+func (p *pg) Ping(ctx context.Context) error {
+	return p.dbc.Ping(ctx)
+}
+
+func (p *pg) Close() {
+	p.dbc.Close()
+}
+
+func MakeContextTx(ctx context.Context, tx pgx.Tx) context.Context {
+	return context.WithValue(ctx, TxKey, tx)
+}
+
+func logQuery(ctx context.Context, q db.Query, args ...interface{}) {
+	prettyQuery := prettier.Pretty(q.QueryRaw, prettier.PlaceholderDollar, args...)
+	log.Println(
+		ctx,
+		fmt.Sprintf("sql: %s", q.Name),
+		fmt.Sprintf("query: %s", prettyQuery),
+	)
+}
+
+==== ./internal/client/db/db.go ====
+package db
+
+import (
+	"context"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+)
+
+// Handler - функция, которая выполняется в транзакции
+type Handler func(ctx context.Context) error
+
+// Client клиент для работы с БД
+type Client interface {
+	DB() DB
+	Close() error
+}
+
+// TxManager менеджер транзакций, который выполняет указанный пользователем обработчик в транзакции
+type TxManager interface {
+	ReadCommitted(ctx context.Context, f Handler) error
+}
+
+// Query обертка над запросом, хранящая имя запроса и сам запрос
+// Имя запроса используется для логирования и потенциально может использоваться еще где-то, например, для трейсинга
+type Query struct {
+	Name     string
+	QueryRaw string
+}
+
+// Transactor интерфейс для работы с транзакциями
+type Transactor interface {
+	BeginTx(ctx context.Context, txOptions pgx.TxOptions) (pgx.Tx, error)
+}
+
+// SQLExecer комбинирует NamedExecer и QueryExecer
+type SQLExecer interface {
+	NamedExecer
+	QueryExecer
+}
+
+// NamedExecer интерфейс для работы с именованными запросами с помощью тегов в структурах
+type NamedExecer interface {
+	ScanOneContext(ctx context.Context, dest interface{}, q Query, args ...interface{}) error
+	ScanAllContext(ctx context.Context, dest interface{}, q Query, args ...interface{}) error
+}
+
+// QueryExecer интерфейс для работы с обычными запросами
+type QueryExecer interface {
+	ExecContext(ctx context.Context, q Query, args ...interface{}) (pgconn.CommandTag, error)
+	QueryContext(ctx context.Context, q Query, args ...interface{}) (pgx.Rows, error)
+	QueryRowContext(ctx context.Context, q Query, args ...interface{}) pgx.Row
+}
+
+// Pinger интерфейс для проверки соединения с БД
+type Pinger interface {
+	Ping(ctx context.Context) error
+}
+
+// DB интерфейс для работы с БД
+type DB interface {
+	SQLExecer
+	Transactor
+	Pinger
+	Close()
+}
+
+==== ./internal/client/db/prettier/querry_prettier.go ====
+package prettier
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
+const (
+	PlaceholderDollar   = "$"
+	PlaceholderQuestion = "?"
+)
+
+func Pretty(query string, placeholder string, args ...any) string {
+	for i, param := range args {
+		var value string
+		switch v := param.(type) {
+		case string:
+			value = fmt.Sprintf("%q", v)
+		case []byte:
+			value = fmt.Sprintf("%q", string(v))
+		default:
+			value = fmt.Sprintf("%v", v)
+		}
+
+		query = strings.Replace(query, fmt.Sprintf("%s%s", placeholder, strconv.Itoa(i+1)), value, -1)
+	}
+
+	query = strings.ReplaceAll(query, "\t", "")
+	query = strings.ReplaceAll(query, "\n", " ")
+
+	return strings.TrimSpace(query)
+}
+
+==== ./internal/client/rpc/client.go ====
+package rpc
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type OtherServiceClient interface {
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+==== ./internal/client/rpc/other_service/client.go ====
+package other_service
+
+import (
+	"context"
+	"database/sql"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/other_auth_v1"
+)
+
+type client struct {
+	authClient desc.OtherAuthV1Client
+}
+
+func New(authClient desc.OtherAuthV1Client) *client {
+	return &client{authClient: authClient}
+}
+
+func (c *client) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	res, err := c.authClient.Get(ctx, &desc.GetRequest{Id: id})
+	if err != nil {
+		return nil, err
+	}
+
+	var updatedAt sql.NullTime
+	if res.GetAuth().UpdatedAt != nil {
+		updatedAt = sql.NullTime{
+			Time:  res.GetAuth().GetUpdatedAt().AsTime(),
+			Valid: true,
+		}
+	}
+
+	return &model.Auth{
+		ID: res.GetAuth().GetId(),
+		Info: model.AuthInfo{
+			Title:   res.GetAuth().GetInfo().GetTitle(),
+			Content: res.GetAuth().GetInfo().GetContent(),
+		},
+		CreatedAt: res.GetAuth().GetCreatedAt().AsTime(),
+		UpdatedAt: updatedAt,
+	}, nil
+}
+
+==== ./internal/tracing/tracing.go ====
+package tracing
+
+import (
+	"github.com/uber/jaeger-client-go/config"
+	"go.uber.org/zap"
+)
+
+func Init(logger *zap.Logger, serviceName string) {
+	cfg := config.Configuration{
+		Sampler: &config.SamplerConfig{
+			Type:  "const",
+			Param: 1,
+		},
+		Reporter: &config.ReporterConfig{
+			LocalAgentHostPort: "localhost:6831",
+		},
+	}
+
+	_, err := cfg.InitGlobalTracer(serviceName)
+	if err != nil {
+		logger.Fatal("failed to init tracing", zap.Error(err))
+	}
+}
+
+==== ./internal/model/auth.go ====
+package model
+
+import (
+	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"time"
+)
+
+type Auth struct {
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+}
+
+type AuthInfo struct {
+	Name     string
+	Email    string
+	Role     auth_v1.Role
+	Password string
+}
+
+==== ./internal/model/claim.go ====
+package model
+
+import (
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/dgrijalva/jwt-go"
+)
+
+const (
+	ExamplePath = "/auth_v1.AuthV1/Get"
+)
+
+type UserClaims struct {
+	jwt.StandardClaims
+	Name string       `json:"name"`
+	Role auth_v1.Role `json:"role"`
+}
+
+==== ./internal/logger/logger.go ====
+package logger
+
+import (
+	"os"
+
+	"github.com/natefinch/lumberjack"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+)
+
+var globalLogger *zap.Logger
+
+func Init(core zapcore.Core, options ...zap.Option) {
+	globalLogger = zap.New(core, options...)
+}
+
+func Info(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Info(msg, fields...)
+	}
+}
+
+func Error(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Error(msg, fields...)
+	}
+}
+
+func Fatal(msg string, fields ...zap.Field) {
+	if globalLogger != nil {
+		globalLogger.Fatal(msg, fields...)
+	}
+}
+
+func InitDefault(logLevel zapcore.Level) {
+	stdout := zapcore.AddSync(os.Stdout)
+	file := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   "logs/app.log",
+		MaxSize:    10, // MB
+		MaxBackups: 3,
+		MaxAge:     7, // days
+	})
+
+	productionCfg := zap.NewProductionEncoderConfig()
+	productionCfg.TimeKey = "timestamp"
+	productionCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	consoleEncoder := zapcore.NewConsoleEncoder(productionCfg)
+	fileEncoder := zapcore.NewJSONEncoder(productionCfg)
+
+	core := zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, stdout, logLevel),
+		zapcore.NewCore(fileEncoder, file, logLevel),
+	)
+
+	Init(core)
+}
+
+==== ./internal/service/service.go ====
+package service
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthService interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+==== ./internal/service/auth/get.go ====
+package auth
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func (s *serv) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	auth, err := s.authRepository.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return auth, nil
+}
+
+==== ./internal/service/auth/service.go ====
+package auth
+
+import (
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/repository"
+	"github.com/beachrockhotel/auth/internal/service"
+)
+
+type serv struct {
+	authRepository repository.AuthRepository
+	txManager      db.TxManager
+}
+
+func NewService(
+	authRepository repository.AuthRepository,
+	txManager db.TxManager,
+) service.AuthService {
+	return &serv{
+		authRepository: authRepository,
+		txManager:      txManager,
+	}
+}
+
+==== ./internal/service/auth/create.go ====
+package auth
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+func (s *serv) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	var id int64
+	err := s.txManager.ReadCommitted(ctx, func(ctx context.Context) error {
+		var errTx error
+		id, errTx = s.authRepository.Create(ctx, info)
+		if errTx != nil {
+			return errTx
+		}
+
+		_, errTx = s.authRepository.Get(ctx, id)
+		if errTx != nil {
+			return errTx
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+==== ./internal/service/auth/service_test.go ====
+package auth_test
+
+import (
+	"context"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/service/auth"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+)
+
+type mockRepo struct {
+	mock.Mock
+}
+
+func (m *mockRepo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	args := m.Called(ctx, info)
+	return int64(args.Int(0)), args.Error(1)
+}
+
+func (m *mockRepo) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(*model.Auth), args.Error(1)
+}
+
+type mockTx struct {
+	mock.Mock
+}
+
+func (m *mockTx) ReadCommitted(ctx context.Context, f db.Handler) error {
+	return f(ctx)
+}
+
+func TestCreate(t *testing.T) {
+	repo := &mockRepo{}
+	tx := &mockTx{}
+
+	s := auth.NewService(repo, tx)
+
+	repo.On("Create", mock.Anything, mock.Anything).Return(1, nil)
+	repo.On("Get", mock.Anything, int64(1)).Return(&model.Auth{ID: 1}, nil)
+
+	id, err := s.Create(context.Background(), &model.AuthInfo{Name: "John"})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1), id)
+}
+
+==== ./internal/repository/auth/converter/auth.go ====
+package converter
+
+import (
+	"github.com/beachrockhotel/auth/internal/model"
+	modelRepo "github.com/beachrockhotel/auth/internal/repository/auth/model"
+)
+
+func ToAuthFromRepo(auth *modelRepo.Auth) *model.Auth {
+	return &model.Auth{
+		ID:        auth.ID,
+		Info:      ToAuthInfoFromRepo(auth.Info),
+		CreatedAt: auth.CreatedAt,
+		UpdatedAt: auth.UpdatedAt,
+	}
+}
+
+func ToAuthInfoFromRepo(info modelRepo.AuthInfo) model.AuthInfo {
+	return model.AuthInfo{
+		Name:  info.Name,
+		Email: info.Email,
+		Role:  info.Role,
+	}
+}
+
+==== ./internal/repository/auth/repository_test.go ====
+package auth_test
+
+import (
+	"context"
+	"os"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+	"github.com/beachrockhotel/auth/internal/model"
+	repoAuth "github.com/beachrockhotel/auth/internal/repository/auth"
+	"github.com/stretchr/testify/require"
+)
+
+func TestCreateAndGet(t *testing.T) {
+
+	dsn := os.Getenv("PG_DSN")
+	ctx := context.Background()
+
+	client, err := pg.New(ctx, dsn)
+	require.NoError(t, err)
+	defer client.Close()
+
+	repo := repoAuth.NewRepository(client)
+
+	id, err := repo.Create(ctx, &model.AuthInfo{
+		Name:     "Test",
+		Email:    "test@example.com",
+		Role:     1,
+		Password: "secret",
+	})
+	require.NoError(t, err)
+
+	authObj, err := repo.Get(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, "Test", authObj.Info.Name)
+}
+
+==== ./internal/repository/auth/model/auth.go ====
+package model
+
+import (
+	"database/sql"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"time"
+)
+
+type Auth struct {
+	ID        int64
+	Info      AuthInfo
+	CreatedAt time.Time
+	UpdatedAt sql.NullTime
+}
+
+type AuthInfo struct {
+	Name  string
+	Email string
+	Role  auth_v1.Role
+}
+
+==== ./internal/repository/auth/repository.go ====
+package auth
+
+import (
+	"context"
+
+	sq "github.com/Masterminds/squirrel"
+
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/repository"
+	"github.com/beachrockhotel/auth/internal/repository/auth/converter"
+	modelRepo "github.com/beachrockhotel/auth/internal/repository/auth/model"
+)
+
+const (
+	tableName = "auth"
+
+	idColumn        = "id"
+	nameColumn      = "name"
+	emailColumn     = "email"
+	roleColumn      = "role"
+	passwordColumn  = "password"
+	createdAtColumn = "created_at"
+	updatedAtColumn = "updated_at"
+)
+
+type repo struct {
+	db db.Client
+}
+
+func NewRepository(db db.Client) repository.AuthRepository {
+	return &repo{db: db}
+}
+
+func (r *repo) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	builder := sq.Insert(tableName).
+		PlaceholderFormat(sq.Dollar).
+		Columns(nameColumn, emailColumn, roleColumn, passwordColumn).
+		Values(info.Name, info.Email, info.Role, info.Password).
+		Suffix("RETURNING id")
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return 0, err
+	}
+
+	q := db.Query{
+		Name:     "auth_repository.Create",
+		QueryRaw: query,
+	}
+
+	var id int64
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&id)
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
+}
+
+func (r *repo) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	builder := sq.Select(idColumn, nameColumn, emailColumn, roleColumn, createdAtColumn, updatedAtColumn).
+		PlaceholderFormat(sq.Dollar).
+		From(tableName).
+		Where(sq.Eq{idColumn: id}).
+		Limit(1)
+
+	query, args, err := builder.ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	q := db.Query{
+		Name:     "auth_repository.Get",
+		QueryRaw: query,
+	}
+
+	var auth modelRepo.Auth
+	err = r.db.DB().QueryRowContext(ctx, q, args...).Scan(&auth.ID, &auth.Info.Name, &auth.Info.Email, &auth.Info.Role, &auth.CreatedAt, &auth.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return converter.ToAuthFromRepo(&auth), nil
+}
+
+==== ./internal/repository/repository.go ====
+package repository
+
+import (
+	"context"
+
+	"github.com/beachrockhotel/auth/internal/model"
+)
+
+type AuthRepository interface {
+	Create(ctx context.Context, info *model.AuthInfo) (int64, error)
+	Get(ctx context.Context, id int64) (*model.Auth, error)
+}
+
+==== ./internal/api/access/implementation.go ====
+package access
+
+import (
+	"context"
+	"google.golang.org/grpc/metadata"
+	"strings"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/utils"
+	"github.com/beachrockhotel/auth/pkg/access_v1"
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+const (
+	authPrefix        = "Bearer "
+	accessTokenSecret = "VqvguGiffXILza1f44TWXowDT4zwf03dtXmqWW4SYyE="
+)
+
+type Implementation struct {
+	access_v1.UnimplementedAccessV1Server
+}
+
+func NewImplementation() *Implementation {
+	return &Implementation{}
+}
+
+var accessibleRoles = map[string]string{
+	model.ExamplePath: "admin",
+}
+
+func (i *Implementation) Check(ctx context.Context, req *access_v1.CheckRequest) (*emptypb.Empty, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, errors.New("metadata is not provided")
+	}
+
+	authHeader, ok := md["authorization"]
+	if !ok || len(authHeader) == 0 {
+		return nil, errors.New("authorization header is not provided")
+	}
+
+	if !strings.HasPrefix(authHeader[0], authPrefix) {
+		return nil, errors.New("invalid authorization header format")
+	}
+
+	token := strings.TrimPrefix(authHeader[0], authPrefix)
+	claims, err := utils.VerifyToken(token, []byte(accessTokenSecret))
+	if err != nil {
+		return nil, errors.New("access token is invalid")
+	}
+
+	role, ok := accessibleRoles[req.GetEndpointAddress()]
+	if !ok || role != claims.Role.String() {
+		return nil, errors.New("access denied")
+	}
+
+	return &emptypb.Empty{}, nil
+}
+
+==== ./internal/api/auth/token.go ====
+package auth
+
+import (
+	"context"
+	"time"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	"github.com/beachrockhotel/auth/internal/utils"
+	"github.com/beachrockhotel/auth/pkg/auth_v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+)
+
+const (
+	refreshTokenSecretKey = "W4/X+LLjehdxptt4YgGFCvMpq5ewptpZZYRHY6A72g0="
+	accessTokenSecretKey  = "VqvguGiffXILza1f44TWXowDT4zwf03dtXmqWW4SYyE="
+
+	refreshTokenExpiration = 60 * time.Minute
+	accessTokenExpiration  = 5 * time.Minute
+)
+
+// Встраивай эти методы в свою реализацию Implementation
+
+func (i *Implementation) Login(ctx context.Context, req *auth_v1.LoginRequest) (*auth_v1.LoginResponse, error) {
+	// здесь должен быть реальный поиск юзера в БД и валидация пароля
+	token, err := utils.GenerateToken(
+		model.AuthInfo{Name: req.GetUsername(), Role: auth_v1.Role_ADMIN},
+		[]byte(refreshTokenSecretKey),
+		refreshTokenExpiration,
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate token")
+	}
+	return &auth_v1.LoginResponse{RefreshToken: token}, nil
+}
+
+func (i *Implementation) GetRefreshToken(ctx context.Context, req *auth_v1.GetRefreshTokenRequest) (*auth_v1.GetRefreshTokenResponse, error) {
+	claims, err := utils.VerifyToken(req.GetRefreshToken(), []byte(refreshTokenSecretKey))
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "invalid refresh token")
+	}
+
+	token, err := utils.GenerateToken(
+		model.AuthInfo{Name: claims.Name, Role: claims.Role},
+		[]byte(refreshTokenSecretKey),
+		refreshTokenExpiration,
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate new refresh token")
+	}
+	return &auth_v1.GetRefreshTokenResponse{RefreshToken: token}, nil
+}
+
+func (i *Implementation) GetAccessToken(ctx context.Context, req *auth_v1.GetAccessTokenRequest) (*auth_v1.GetAccessTokenResponse, error) {
+	claims, err := utils.VerifyToken(req.GetRefreshToken(), []byte(refreshTokenSecretKey))
+	if err != nil {
+		return nil, status.Errorf(codes.Aborted, "invalid refresh token")
+	}
+
+	accessToken, err := utils.GenerateToken(
+		model.AuthInfo{Name: claims.Name, Role: claims.Role},
+		[]byte(accessTokenSecretKey),
+		accessTokenExpiration,
+	)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to generate access token")
+	}
+	return &auth_v1.GetAccessTokenResponse{AccessToken: accessToken}, nil
+}
+
+==== ./internal/api/auth/get.go ====
+package auth
+
+import (
+	"context"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"log"
+	"math/rand"
+	"time"
+
+	"github.com/beachrockhotel/auth/internal/converter"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func (i *Implementation) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
+	if req.GetId() == 0 {
+		return nil, errors.Errorf("id is empty")
+	}
+
+	authObj, err := i.authService.Get(ctx, req.GetId())
+	if err != nil {
+		return nil, err
+	}
+
+	time.Sleep(time.Duration((rand.Intn(1000)) * time.Millisecond)
+
+	span, ctx := opentracing.StartSpanFromContext(ctx, "get auth")
+	defer span.Finish()
+
+	span.SetTag("id", req.GetId())
+
+	auth, err = s.otherServiceClient.Get(ctx, req.GetId())
+	if err != nil {
+		return nil, errors.WithMessage(err, "getting auth")
+	}
+
+	log.Printf("id: %d, name: %s, email: %s, role: %s, created_at: %v, updated_at: %v\n", authObj.ID, authObj.Info.Name, authObj.Info.Email, authObj.Info.Role, authObj.CreatedAt, authObj.UpdatedAt)
+
+	return &desc.GetResponse{
+		Auth: converter.ToAuthFromService(authObj),
+	}, nil
+}
+
+==== ./internal/api/auth/service.go ====
+package auth
+
+import (
+	"github.com/beachrockhotel/auth/internal/service"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+type Implementation struct {
+	desc.UnimplementedAuthV1Server
+	authService service.AuthService
+}
+
+func NewImplementation(authService service.AuthService) *Implementation {
+	return &Implementation{
+		authService: authService,
+	}
+}
+
+==== ./internal/api/auth/create.go ====
+package auth
+
+import (
+	"context"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/converter"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+)
+
+func (i *Implementation) Create(ctx context.Context, req *desc.CreateRequest) (*desc.CreateResponse, error) {
+	id, err := i.authService.Create(ctx, converter.ToAuthInfoFromDesc(req.GetInfo()))
+	if err != nil {
+		return nil, err
+	}
+
+	log.Printf("inserted user with id: %d", id)
+
+	return &desc.CreateResponse{
+		Id: id,
+	}, nil
+}
+
+==== ./internal/api/auth/service_test.go ====
+package auth_test
+
+import (
+	"context"
+	"github.com/stretchr/testify/require"
+	"log"
+	"net"
+	"testing"
+
+	"github.com/beachrockhotel/auth/internal/api/auth"
+	"github.com/beachrockhotel/auth/internal/model"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/test/bufconn"
+)
+
+type mockAuthService struct {
+	mock.Mock
+}
+
+func (m *mockAuthService) Create(ctx context.Context, info *model.AuthInfo) (int64, error) {
+	args := m.Called(ctx, info)
+	return int64(args.Int(0)), args.Error(1)
+}
+
+func (m *mockAuthService) Get(ctx context.Context, id int64) (*model.Auth, error) {
+	args := m.Called(ctx, id)
+	return args.Get(0).(*model.Auth), args.Error(1)
+}
+
+func dialer(srv desc.AuthV1Server) func(context.Context, string) (net.Conn, error) {
+	lis := bufconn.Listen(1024 * 1024)
+	s := grpc.NewServer()
+	desc.RegisterAuthV1Server(s, srv)
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Fatal(err)
+		}
+	}()
+	return func(ctx context.Context, s string) (net.Conn, error) {
+		return lis.Dial()
+	}
+}
+
+func TestCreate(t *testing.T) {
+	mockSvc := &mockAuthService{}
+	impl := auth.NewImplementation(mockSvc)
+
+	// Ожидание мока
+	mockSvc.On("Create", mock.Anything, mock.Anything).Return(123, nil)
+
+	conn, err := grpc.DialContext(context.Background(), "", grpc.WithInsecure(), grpc.WithContextDialer(dialer(impl)))
+	require.NoError(t, err)
+	client := desc.NewAuthV1Client(conn)
+
+	resp, err := client.Create(context.Background(), &desc.CreateRequest{
+		Info: &desc.AuthInfo{Name: "Test", Email: "test@example.com"},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(123), resp.GetId())
+}
+
+==== ./internal/metric/metrics.go ====
+package metric
+
+import (
+	"context"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+)
+
+const (
+	namespace = "my_space"
+	appName   = "my_app"
+)
+
+type Metrics struct {
+	requestCounter        prometheus.Counter
+	responseCounter       *prometheus.CounterVec
+	histogramResponseTime *prometheus.HistogramVec
+}
+
+var metrics *Metrics
+
+func Init(_ context.Context) error {
+	metrics = &Metrics{
+		requestCounter: promauto.NewCounter(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Subsystem: "grpc",
+				Name:      appName + "_requests_total",
+				Help:      "Количество запросов к серверу",
+			},
+		),
+		responseCounter: promauto.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Subsystem: "grpc",
+				Name:      appName + "_responses_total",
+				Help:      "Количество ответов от сервера",
+			},
+			[]string{"status", "method"},
+		),
+		histogramResponseTime: promauto.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: namespace,
+				Subsystem: "grpc",
+				Name:      appName + "_histogram_response_time_seconds",
+				Help:      "Время ответа от сервера",
+				Buckets:   prometheus.ExponentialBuckets(0.000001, 2, 16),
+			},
+			[]string{"status"},
+		),
+	}
+	return nil
+}
+
+func IncRequestCounter() {
+	metrics.requestCounter.Inc()
+}
+
+func IncResponseCounter(status string, method string) {
+	metrics.responseCounter.WithLabelValues(status, method).Inc()
+}
+
+func HistogramResponseTimeObserve(status string, duration float64) {
+	metrics.histogramResponseTime.WithLabelValues(status).Observe(duration)
+}
+
+==== ./internal/app/service_provider.go ====
+package app
+
+import (
+	"context"
+	"log"
+
+	accessAPI "github.com/beachrockhotel/auth/internal/api/access"
+	"github.com/beachrockhotel/auth/internal/api/auth"
+	"github.com/beachrockhotel/auth/internal/client/db"
+	"github.com/beachrockhotel/auth/internal/client/db/pg"
+	"github.com/beachrockhotel/auth/internal/client/db/transaction"
+	"github.com/beachrockhotel/auth/internal/closer"
+	"github.com/beachrockhotel/auth/internal/config"
+	"github.com/beachrockhotel/auth/internal/repository"
+	authRepository "github.com/beachrockhotel/auth/internal/repository/auth"
+	"github.com/beachrockhotel/auth/internal/service"
+	authService "github.com/beachrockhotel/auth/internal/service/auth"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+)
+
+type serviceProvider struct {
+	pgConfig      config.PGConfig
+	grpcConfig    config.GRPCConfig
+	httpConfig    config.HTTPConfig
+	swaggerConfig config.SwaggerConfig
+
+	dbClient       db.Client
+	txManager      db.TxManager
+	authRepository repository.AuthRepository
+
+	authService service.AuthService
+
+	authImpl *auth.Implementation
+}
+
+func newServiceProvider() *serviceProvider {
+	return &serviceProvider{}
+}
+
+func (s *serviceProvider) PGConfig() config.PGConfig {
+	if s.pgConfig == nil {
+		cfg, err := config.NewPGConfig()
+		if err != nil {
+			log.Fatalf("failed to get pg config: %s", err.Error())
+		}
+
+		s.pgConfig = cfg
+	}
+
+	return s.pgConfig
+}
+
+func (s *serviceProvider) AccessImpl(ctx context.Context) descAccess.AccessV1Server {
+	return accessAPI.NewImplementation()
+}
+
+func (s *serviceProvider) GRPCConfig() config.GRPCConfig {
+	if s.grpcConfig == nil {
+		cfg, err := config.NewGRPCConfig()
+		if err != nil {
+			log.Fatalf("failed to get grpc config: %s", err.Error())
+		}
+
+		s.grpcConfig = cfg
+	}
+
+	return s.grpcConfig
+}
+
+func (s *serviceProvider) DBClient(ctx context.Context) db.Client {
+	if s.dbClient == nil {
+		cl, err := pg.New(ctx, s.PGConfig().DSN())
+		if err != nil {
+			log.Fatalf("failed to create db client: %v", err)
+		}
+
+		err = cl.DB().Ping(ctx)
+		if err != nil {
+			log.Fatalf("ping error: %s", err.Error())
+		}
+		closer.Add(cl.Close)
+
+		s.dbClient = cl
+	}
+
+	return s.dbClient
+}
+
+func (s *serviceProvider) TxManager(ctx context.Context) db.TxManager {
+	if s.txManager == nil {
+		s.txManager = transaction.NewTransactionManager(s.DBClient(ctx).DB())
+	}
+
+	return s.txManager
+}
+
+func (s *serviceProvider) AuthRepository(ctx context.Context) repository.AuthRepository {
+	if s.authRepository == nil {
+		s.authRepository = authRepository.NewRepository(s.DBClient(ctx))
+	}
+
+	return s.authRepository
+}
+
+func (s *serviceProvider) AuthService(ctx context.Context) service.AuthService {
+	if s.authService == nil {
+		s.authService = authService.NewService(
+			s.AuthRepository(ctx),
+			s.TxManager(ctx),
+		)
+	}
+
+	return s.authService
+}
+
+func (s *serviceProvider) AuthImpl(ctx context.Context) *auth.Implementation {
+	if s.authImpl == nil {
+		s.authImpl = auth.NewImplementation(s.AuthService(ctx))
+	}
+
+	return s.authImpl
+}
+
+func (s *serviceProvider) HTTPConfig() config.HTTPConfig {
+	if s.httpConfig == nil {
+		cfg, err := config.NewHTTPConfig()
+		if err != nil {
+			log.Fatalf("failed to get http config: %s", err.Error())
+		}
+
+		s.httpConfig = cfg
+	}
+
+	return s.httpConfig
+}
+
+func (s *serviceProvider) SwaggerConfig() config.SwaggerConfig {
+	if s.swaggerConfig == nil {
+		cfg, err := config.NewSwaggerConfig()
+		if err != nil {
+			log.Fatalf("failed to get swagger config: %s", err.Error())
+		}
+		s.swaggerConfig = cfg
+	}
+	return s.swaggerConfig
+}
+
+==== ./internal/app/app.go ====
+package app
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/interceptor"
+	"github.com/beachrockhotel/auth/internal/metric"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"sync"
+
+	"github.com/rs/cors"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+
+	"github.com/beachrockhotel/auth/internal/closer"
+	"github.com/beachrockhotel/auth/internal/config"
+	desc "github.com/beachrockhotel/auth/pkg/auth_v1"
+	_ "github.com/beachrockhotel/auth/statik"
+
+	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	"github.com/rakyll/statik/fs"
+
+	"crypto/tls"
+	"google.golang.org/grpc/credentials"
+
+	"github.com/beachrockhotel/auth/internal/logger"
+)
+
+type App struct {
+	serviceProvider *serviceProvider
+	grpcServer      *grpc.Server
+	httpServer      *http.Server
+	swaggerServer   *http.Server
+}
+
+// NewApp создаёт и инициализирует все зависимости
+func NewApp(ctx context.Context) (*App, error) {
+	a := &App{}
+
+	if err := a.initDeps(ctx); err != nil {
+		return nil, err
+	}
+
+	return a, nil
+}
+
+// Run запускает GRPC и HTTP серверы параллельно
+func (a *App) Run() error {
+	defer func() {
+		closer.CloseAll()
+		closer.Wait()
+	}()
+
+	wg := &sync.WaitGroup{}
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		if err := a.runGRPCServer(); err != nil {
+			log.Fatalf("failed to run GRPC server: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		if err := a.runHTTPServer(); err != nil {
+			log.Fatalf("failed to run HTTP server: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		err := a.runSwaggerServer()
+		if err != nil {
+			log.Fatalf("failed to run Swagger server: %v", err)
+		}
+	}()
+
+	wg.Wait()
+	return nil
+}
+
+// initDeps инициализирует все зависимости по порядку
+func (a *App) initDeps(ctx context.Context) error {
+	inits := []func(context.Context) error{
+		a.initConfig,
+		a.initServiceProvider,
+		a.initGRPCServer,
+		a.initHTTPServer,
+		a.initSwaggerServer,
+	}
+
+	for _, f := range inits {
+		if err := f(ctx); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (a *App) initConfig(_ context.Context) error {
+	return config.Load(".env")
+}
+
+func (a *App) initServiceProvider(_ context.Context) error {
+	a.serviceProvider = newServiceProvider()
+	return nil
+}
+
+func (a *App) initGRPCServer(ctx context.Context) error {
+	cert, err := tls.LoadX509KeyPair("service.pem", "service.key")
+	if err != nil {
+		return err
+	}
+
+	creds := credentials.NewTLS(&tls.Config{
+		Certificates: []tls.Certificate{cert},
+	})
+
+	err = metric.Init(ctx)
+	if err != nil {
+		return err
+	}
+
+	a.grpcServer = grpc.NewServer(
+		grpc.Creds(creds),
+		grpc.UnaryInterceptor(interceptor.MetricsInterceptor, interceptor.ServerTracingInterceptor),
+	)
+
+	reflection.Register(a.grpcServer)
+	desc.RegisterAuthV1Server(a.grpcServer, a.serviceProvider.AuthImpl(ctx))
+
+	go func() {
+		err = runPrometheus()
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	descAccess.RegisterAccessV1Server(a.grpcServer, a.serviceProvider.AccessImpl(ctx))
+	return nil
+}
+
+func (a *App) initHTTPServer(ctx context.Context) error {
+	mux := runtime.NewServeMux()
+
+	creds := credentials.NewTLS(&tls.Config{
+		InsecureSkipVerify: true, // на dev можно так, на prod надо валидный cert
+	})
+
+	opts := []grpc.DialOption{
+		grpc.WithTransportCredentials(creds),
+	}
+
+	err := desc.RegisterAuthV1HandlerFromEndpoint(
+		ctx,
+		mux,
+		a.serviceProvider.GRPCConfig().Address(),
+		opts,
+	)
+	if err != nil {
+		return err
+	}
+
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Content-Length", "Authorization"},
+		AllowCredentials: true,
+	})
+
+	a.httpServer = &http.Server{
+		Addr:    a.serviceProvider.HTTPConfig().Address(),
+		Handler: corsMiddleware.Handler(mux),
+	}
+
+	return nil
+}
+
+func (a *App) initSwaggerServer(_ context.Context) error {
+	statikFs, err := fs.New()
+	if err != nil {
+		return err
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", http.StripPrefix("/", http.FileServer(statikFs)))
+	mux.HandleFunc("/api.swagger.json", serveSwaggerFile(statikFs, "/api.swagger.json"))
+
+	a.swaggerServer = &http.Server{
+		Addr:    a.serviceProvider.SwaggerConfig().Address(),
+		Handler: mux,
+	}
+
+	return nil
+}
+
+func (a *App) runGRPCServer() error {
+	addr := a.serviceProvider.GRPCConfig().Address()
+	logger.Info("GRPC server is running", zap.String("addr", addr))
+
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	return a.grpcServer.Serve(listener)
+}
+
+func (a *App) runHTTPServer() error {
+	addr := a.serviceProvider.HTTPConfig().Address()
+	logger.Info("HTTP server is running", zap.String("addr", addr))
+
+	return a.httpServer.ListenAndServe()
+
+}
+
+func (a *App) runSwaggerServer() error {
+	addr := a.serviceProvider.SwaggerConfig().Address()
+	logger.Info("Swagger server is running", zap.String("addr", addr))
+
+	return a.swaggerServer.ListenAndServe()
+}
+
+func serveSwaggerFile(fs http.FileSystem, path string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		logger.Info("Serving swagger file", zap.String("path", path))
+
+		file, err := fs.Open(path)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Error("Error opening swagger file", zap.Error(err))
+			return
+		}
+		defer file.Close()
+
+		content, err := io.ReadAll(file)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Error("Error reading swagger file", zap.Error(err))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, err = w.Write(content)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			logger.Error("Error writing swagger response", zap.Error(err))
+			return
+		}
+
+		logger.Info("Successfully served swagger file", zap.String("path", path))
+	}
+}
+
+func runPrometheus() error {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	prometheusServer := &http.Server{
+		Addr:    "0.0.0.0:2112",
+		Handler: mux,
+	}
+
+	log.Printf("Prometheus is running on %s", prometheusServer.Addr)
+
+	err := prometheusServer.ListenAndServe()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+==== ./internal/interceptor/validate.go ====
+package interceptor
+
+import (
+	"context"
+
+	"google.golang.org/grpc"
+)
+
+type validator interface {
+	Validate() error
+}
+
+func ValidateInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if val, ok := req.(validator); ok {
+		if err := val.Validate(); err != nil {
+			return nil, err
+		}
+	}
+
+	return handler(ctx, req)
+}
+
+==== ./internal/interceptor/metrics.go ====
+package interceptor
+
+import (
+	"context"
+	"time"
+
+	"google.golang.org/grpc"
+
+	"github.com/beachrockhotel/auth/internal/metric"
+)
+
+func MetricsInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	metric.IncRequestCounter()
+
+	timeStart := time.Now()
+
+	res, err := handler(ctx, req)
+	diffTime := time.Since(timeStart)
+
+	if err != nil {
+		metric.IncResponseCounter("error", info.FullMethod)
+		metric.HistogramResponseTimeObserve("error", diffTime.Seconds())
+	} else {
+		metric.IncResponseCounter("success", info.FullMethod)
+		metric.HistogramResponseTimeObserve("success", diffTime.Seconds())
+	}
+
+	return res, err
+}
+
+==== ./internal/interceptor/server_tracing.go ====
+package interceptor
+
+import (
+	"context"
+
+	"github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go/ext"
+	"github.com/uber/jaeger-client-go"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
+)
+
+const traceIDKey = "x-trace-id"
+
+func ServerTracingInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	span, ctx := opentracing.StartSpanFromContext(ctx, info.FullMethod)
+	defer span.Finish()
+
+	spanContext, ok := span.Context().(jaeger.SpanContext)
+	if ok {
+		ctx = metadata.NewOutgoingContext(ctx, metadata.Pairs(traceIDKey, spanContext.TraceID().String()))
+
+		header := metadata.New(map[string]string{traceIDKey: spanContext.TraceID().String()})
+		err := grpc.SendHeader(ctx, header)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	res, err := handler(ctx, req)
+	if err != nil {
+		ext.Error.Set(span, true)
+		span.SetTag("err", err.Error())
+	} else {
+		// Ответ может быть большим, поэтому не стоит добавлять его в теги
+		// Здесь это лишь пример, как можно добавить ответ в тег
+		span.SetTag("res", res)
+	}
+
+	return res, err
+}
+
+==== ./internal/interceptor/logger.go ====
+package interceptor
+
+import (
+	"context"
+	"time"
+
+	"go.uber.org/zap"
+	"google.golang.org/grpc"
+
+	"github.com/beachrockhotel/auth/internal/logger"
+)
+
+func LogInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	now := time.Now()
+
+	res, err := handler(ctx, req)
+	if err != nil {
+		logger.Error(err.Error(), zap.String("method", info.FullMethod), zap.Any("req", req))
+	}
+
+	logger.Info("request", zap.String("method", info.FullMethod), zap.Any("req", req), zap.Any("res", res), zap.Duration("duration", time.Since(now)))
+
+	return res, err
+}
+
+==== ./internal/config/pg.go ====
+package config
+
+import (
+	"errors"
+	"os"
+)
+
+const (
+	dsnEnvName = "PG_DSN"
+)
+
+type PGConfig interface {
+	DSN() string
+}
+
+type pgConfig struct {
+	dsn string
+}
+
+func NewPGConfig() (PGConfig, error) {
+	dsn := os.Getenv(dsnEnvName)
+	if len(dsn) == 0 {
+		return nil, errors.New("pg dsn not found")
+	}
+
+	return &pgConfig{
+		dsn: dsn,
+	}, nil
+}
+
+func (cfg *pgConfig) DSN() string {
+	return cfg.dsn
+}
+
+==== ./internal/config/swagger.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	swaggerHostEnvName = "SWAGGER_HOST"
+	swaggerPortEnvName = "SWAGGER_PORT"
+)
+
+type SwaggerConfig interface {
+	Address() string
+}
+
+type swaggerConfig struct {
+	host string
+	port string
+}
+
+func NewSwaggerConfig() (SwaggerConfig, error) {
+	host := os.Getenv(swaggerHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("swagger host not found")
+	}
+
+	port := os.Getenv(swaggerPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("swagger port not found")
+	}
+
+	return &swaggerConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *swaggerConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./internal/config/http.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	httpHostEnvName = "HTTP_HOST"
+	httpPortEnvName = "HTTP_PORT"
+)
+
+type HTTPConfig interface {
+	Address() string
+}
+
+type httpConfig struct {
+	host string
+	port string
+}
+
+func NewHTTPConfig() (HTTPConfig, error) {
+	host := os.Getenv(httpHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("http host not found")
+	}
+
+	port := os.Getenv(httpPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("http port not found")
+	}
+
+	return &httpConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *httpConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./internal/config/config.go ====
+package config
+
+import (
+	"github.com/joho/godotenv"
+)
+
+func Load(path string) error {
+	err := godotenv.Load(path)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+==== ./internal/config/grpc.go ====
+package config
+
+import (
+	"net"
+	"os"
+
+	"github.com/pkg/errors"
+)
+
+const (
+	grpcHostEnvName = "GRPC_HOST"
+	grpcPortEnvName = "GRPC_PORT"
+)
+
+type GRPCConfig interface {
+	Address() string
+}
+
+type grpcConfig struct {
+	host string
+	port string
+}
+
+func NewGRPCConfig() (GRPCConfig, error) {
+	host := os.Getenv(grpcHostEnvName)
+	if len(host) == 0 {
+		return nil, errors.New("grpc host not found")
+	}
+
+	port := os.Getenv(grpcPortEnvName)
+	if len(port) == 0 {
+		return nil, errors.New("grpc port not found")
+	}
+
+	return &grpcConfig{
+		host: host,
+		port: port,
+	}, nil
+}
+
+func (cfg *grpcConfig) Address() string {
+	return net.JoinHostPort(cfg.host, cfg.port)
+}
+
+==== ./sources_dump.txt ====
+
+==== ./Dockerfile ====
+FROM golang:1.20.3-alpine AS builder
+
+WORKDIR /app
+COPY --from=builder /app/bin/crud_server .
+
+RUN go mod download
+RUN go build -o ./bin/crud_server cmd/grpc_server/main.go
+
+FROM alpine:latest
+
+WORKDIR /root/
+COPY --from=builder /github.com/beachrockhotel/auth/source/bin/crud_server .
+
+CMD ["./crud_server"]
+==== ./migration.sh ====
+#!/bin/bash
+source .env
+
+export MIGRATION_DSN="host=pg port=5432 dbname=$PG_DATABASE_NAME user=$PG_USER password=$PG_PASSWORD sslmode=disable"
+
+sleep 2 && goose -dir "${MIGRATION_DIR}" postgres ${MIGRATION_DSN}" up -v
+==== ./migrations/20250210214645_create_auth_table.sql ====
+-- +goose Up
+CREATE TABLE auth (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255),
+    email VARCHAR(255),
+    role INTEGER DEFAULT 1,
+    password TEXT NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMP NULL DEFAULT NULL
+);
+-- +goose Down
+DROP TABLE auth;
+==== ./alerts.yml ====
+groups:
+  - name: alerts
+    rules:
+    - alert: TargetIsDown
+      expr: up == 0
+      for: 30s
+      labels:
+        severity: medium
+      annotations:
+        summary: "The target {{ $labels.job }} is down"
+        description: "Instance {{ $labels.instance }} из job {{ $labels.job }} не отвечает в течении 30 секунд"
+==== ./prometheus.yml ====
+global:
+  scrape_interval: 2s
+  evaluation_interval: 2s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: "prometheus"
+    static_configs:
+      - targets: [ "localhost:9090" ]
+
+  - job_name: "app"
+    static_configs:
+      - targets: [ "172.17.0.1:2112" ]
+==== ./grafana_dashboard.json ====
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": 1,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+          },
+          "editorMode": "code",
+          "expr": "rate(my_space_grpc_my_app_requests_total[5s])",
+          "instant": false,
+          "legendFormat": "__auto",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Входящий трафик (rps)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/error/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/success/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+          },
+          "editorMode": "code",
+          "expr": "rate(my_space_grpc_my_app_responses_total[10s])",
+          "instant": false,
+          "legendFormat": "{{status}}:{{method}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Ответы от сервера (rps)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/error/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/success/"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.9,\n    sum(rate(my_space_grpc_my_app_histogram_response_time_seconds_bucket[10s])) by (le, status)\n)",
+          "instant": false,
+          "legendFormat": "0.9q : {{status}}",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "bf865d35-2eb7-4209-91c4-5ecea9095e44"
+          },
+          "editorMode": "code",
+          "expr": "histogram_quantile(0.5,\n    sum(rate(my_space_grpc_my_app_histogram_response_time_seconds_bucket[10s])) by (le, status)\n)",
+          "hide": false,
+          "instant": false,
+          "legendFormat": "0.5q : {{status}}",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "Квантили времени ответа",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-5m",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Service overview",
+  "uid": "b6b656b1-d42c-454d-b033-a0be8019db6f",
+  "version": 2,
+  "weekStart": ""
+}
+==== ./.github/workflows/ci.yaml ====
+name: CI
+
+on:
+    push:
+        branches: [ main, master ]
+    pull_request:
+        branches: [ main, master ]
+
+env:
+  REGISTRY: "cr.selcloud.ru/beachrockhotel"
+  IMAGE_NAME: "crud-server"
+  CONTAINER_NAME: "crud-server-container"
+
+jobs:
+  image-build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout master
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Login to Docker Registry
+        run: docker login -u ${{ secrets.REGISTRY_USERNAME }} -p ${{ secrets.REGISTRY_PASSWORD }} $REGISTRY
+
+      - name: Build and Push Docker Image
+        run: |
+          TAG_NAME=$(echo $GITHUB_SHA | head -c7)
+          docker buildx create --use
+          docker buildx build --no-cache --push --tag $REGISTRY/$IMAGE_NAME:$TAG_NAME -f grpc/Dockerfile grpc/
+
+  deploy-image:
+    runs-on: ubuntu-latest
+    needs: image-build-and-push
+
+    steps:
+      - name: Deploy to Selectel Cloud via SSH action
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSHKEY }}
+          passphrase: ${{ secrets.SSH_PASSPHRASE }}
+          envs: IMAGE_NAME,REGISTRY,GITHUB_SHA,CONTAINER_NAME
+          script: |
+            # Set up variables
+            TAG_NAME=$(echo $GITHUB_SHA | head -c7)
+            
+            # Login into Selectel Registry
+            docker login -u ${{ secrets.REGISTRY_USERNAME }} -p ${{ secrets.REGISTRY_PASSWORD }} $REGISTRY
+            
+            # Stop running container
+            docker stop $CONTAINER_NAME
+            
+            # Remove old container
+            docker rm $CONTAINER_NAME
+            
+            # Run a new container from a new image
+            docker run -d -p 50051:50051 --name $CONTAINER_NAME -t $REGISTRY/$IMAGE_NAME:$TAG_NAME
+==== ./logs/app.log ====
+{"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-27T01:20:36.951+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-27T18:22:21.707+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-28T04:19:33.654+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-28T04:19:33.654+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-28T04:19:33.654+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-28T04:23:24.000+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-28T04:23:24.000+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-28T04:23:24.000+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-28T04:27:27.618+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-28T04:27:27.618+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-28T04:27:27.618+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T15:10:45.739+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T15:10:45.738+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T15:10:45.738+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T15:18:13.449+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T15:18:13.449+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T15:18:13.449+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T15:24:14.075+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T15:24:14.076+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T15:24:14.075+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T16:02:58.871+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T16:02:58.871+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T16:02:58.871+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T16:10:14.619+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T16:10:14.619+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T16:10:14.619+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T18:21:22.118+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T18:21:22.118+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T18:21:22.118+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T18:44:15.136+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T18:44:15.136+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T18:44:15.136+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-29T22:37:43.957+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+{"level":"info","timestamp":"2025-06-29T22:37:43.957+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-29T22:37:43.957+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-30T02:57:07.767+0300","msg":"Swagger server is running","addr":"localhost:8090"}
+{"level":"info","timestamp":"2025-06-30T02:57:07.767+0300","msg":"HTTP server is running","addr":"localhost:8080"}
+{"level":"info","timestamp":"2025-06-30T02:57:07.767+0300","msg":"GRPC server is running","addr":"localhost:50051"}
+
+==== ./api/auth_v1/auth.proto ====
+syntax = "proto3";
+
+package auth_v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/beachrockhotel/auth/pkg/auth_v1;auth_v1";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Auth API"
+    version: "1.0.0"
+    contact: {
+      name: "Dmitriy Komarov"
+      email: "300@gmail.com"
+    };
+  };
+
+  host: "localhost:8080",
+  schemes: HTTP,
+  schemes: HTTPS,
+  consumes: "application/json",
+  produces: "application/json",
+};
+
+
+service AuthV1 {
+  // Создает нового пользователя
+  rpc Create(CreateRequest) returns (CreateResponse){
+    option (google.api.http) = {
+      post: "/auth/v1/create"
+      body: "*"
+    };
+  }
+  rpc Get(GetRequest) returns (GetResponse){
+    option (google.api.http) = {
+      get: "/auth/v1"
+    };
+  }
+  rpc Update(UpdateRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      patch: "/auth/v1"
+      body: "*"
+    };
+  }
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      delete: "/auth/v1"
+    };
+  }
+
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc GetRefreshToken (GetRefreshTokenRequest) returns (GetRefreshTokenResponse);
+  rpc GetAccessToken (GetAccessTokenRequest) returns (GetAccessTokenResponse);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+message AuthInfo {
+  // Имя пользователя
+  string name = 1;
+  // Email пользователя
+  string email = 2;
+  // Роль пользователя
+  Role role = 3;
+  string password = 4;
+}
+
+message CreateRequest {
+  AuthInfo info = 1;
+}
+
+message CreateResponse {
+  int64 id = 1;
+}
+
+message GetRequest {
+  int64 id = 1;
+}
+
+message Auth {
+  int64 id = 1;
+  AuthInfo info = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message GetResponse {
+  Auth auth = 1;
+}
+
+message UpdateRequest {
+  int64 id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue email = 3;
+}
+
+message DeleteRequest {
+  int64 id = 1;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenResponse {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenResponse {
+  string access_token = 1;
+}
+
+==== ./api/access_v1/access.proto ====
+syntax = "proto3";
+
+package access_v1;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/beachrockhotel/auth/pkg/access_v1;access_v1";
+
+service AccessV1 {
+  rpc Check(CheckRequest) returns (google.protobuf.Empty);
+}
+
+message CheckRequest {
+  string endpoint_address = 1;
+}
+==== ./api/other_auth_v1/other_auth.proto ====
+syntax = "proto3";
+
+package auth_v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "validate/validate.proto";
+import "google/api/annotations.proto";
+import "protoc-gen-openapiv2/options/annotations.proto";
+
+option go_package = "github.com/beachrockhotel/auth/pkg/other_auth_v1;_other_auth_v1";
+
+option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_swagger) = {
+  info: {
+    title: "Auth API"
+    version: "1.0.0"
+    contact: {
+      name: "Dmitriy Komarov"
+      email: "300@gmail.com"
+    };
+  };
+
+  host: "localhost:8080",
+  schemes: HTTP,
+  schemes: HTTPS,
+  consumes: "application/json",
+  produces: "application/json",
+};
+
+
+service OtherAuthV1 {
+  // Создает нового пользователя
+  rpc Create(CreateRequest) returns (CreateResponse){
+    option (google.api.http) = {
+      post: "/auth/v1/create"
+      body: "*"
+    };
+  }
+  rpc Get(GetRequest) returns (GetResponse){
+    option (google.api.http) = {
+      get: "/auth/v1"
+    };
+  }
+  rpc Update(UpdateRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      patch: "/auth/v1"
+      body: "*"
+    };
+  }
+  rpc Delete(DeleteRequest) returns (google.protobuf.Empty){
+    option (google.api.http) = {
+      delete: "/auth/v1"
+    };
+  }
+
+  rpc Login (LoginRequest) returns (LoginResponse);
+  rpc GetRefreshToken (GetRefreshTokenRequest) returns (GetRefreshTokenResponse);
+  rpc GetAccessToken (GetAccessTokenRequest) returns (GetAccessTokenResponse);
+}
+
+enum Role {
+  ROLE_UNSPECIFIED = 0;
+  USER = 1;
+  ADMIN = 2;
+}
+
+message AuthInfo {
+  // Имя пользователя
+  string name = 1;
+  // Email пользователя
+  string email = 2;
+  // Роль пользователя
+  Role role = 3;
+  string password = 4;
+}
+
+message CreateRequest {
+  AuthInfo info = 1;
+}
+
+message CreateResponse {
+  int64 id = 1;
+}
+
+message GetRequest {
+  int64 id = 1;
+}
+
+message Auth {
+  int64 id = 1;
+  AuthInfo info = 2;
+  google.protobuf.Timestamp created_at = 3;
+  google.protobuf.Timestamp updated_at = 4;
+}
+
+message GetResponse {
+  Auth auth = 1;
+}
+
+message UpdateRequest {
+  int64 id = 1;
+  google.protobuf.StringValue name = 2;
+  google.protobuf.StringValue email = 3;
+}
+
+message DeleteRequest {
+  int64 id = 1;
+}
+
+message LoginRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetRefreshTokenResponse {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenRequest {
+  string refresh_token = 1;
+}
+
+message GetAccessTokenResponse {
+  string access_token = 1;
+}
+
+==== ./migration.Dockerfile ====
+FROM alpine:3.13
+
+RUN apk update && \
+    apk upgrade && \
+    apk add bash && \
+    rm -rf /var/cache/apk/*
+
+ADD https://github.com/pressly/goose/releases/download/v3.14.0/goose_linux_x86_64 /bin/goose
+RUN chmod +x /bin/goose
+
+WORKDIR /root
+
+ADD migrations/*.sql migrations/
+ADD migration.sh .
+ADD .env .
+
+RUN chmod +x migration.sh
+
+ENTRYPOINT ["bash", "migration.sh"]
+
+==== ./.env ====
+POSTGRES_DB=auth
+POSTGRES_USER=auth-user
+POSTGRES_PASSWORD=auth-password
+MIGRATION_DIR=./migrations
+
+PG_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
+PG_PORT=54321
+
+LOCAL_MIGRATION_DIR=./migrations
+LOCAL_MIGRATION_DSN=host=localhost port=54321 dbname=auth user=auth-user password=auth-password sslmode=disable
+
+GRPC_HOST=localhost
+GRPC_PORT=50051
+
+HTTP_HOST=localhost
+HTTP_PORT=8080
+
+SWAGGER_HOST=localhost
+SWAGGER_PORT=8090
+==== ./cmd/grpc_client/main.go ====
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+
+	"github.com/beachrockhotel/auth/internal/logger"
+	"github.com/beachrockhotel/auth/internal/tracing"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	"github.com/opentracing/opentracing-go"
+	"log"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
+
+	"github.com/beachrockhotel/auth/internal/model"
+	descAccess "github.com/beachrockhotel/auth/pkg/access_v1"
+)
+
+var accessToken = flag.String("a", "", "access token")
+
+const servicePort = 50051
+
+func main() {
+	flag.Parse()
+	logger.Init(getCore(getAtomicLevel()))
+	tracing.Init(logger.logger(), serviceName)
+
+	ctx := context.Background()
+	md := metadata.New(map[string]string{"Authorization": "Bearer " + *accessToken})
+	ctx = metadata.NewOutgoingContext(ctx, md)
+
+	conn, err := grpc.Dial(
+		fmt.Sprintf(":%d", servicePort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithUnaryInterceptor(otgrpc.OpenTracingClientInterceptor(opentracing.GlobalTracer())),
+	)
+	if err != nil {
+		log.Fatalf("failed to dial GRPC client: %v", err)
+	}
+
+	cl := descAccess.NewAccessV1Client(conn)
+
+	_, err = cl.Check(ctx, &descAccess.CheckRequest{
+		EndpointAddress: model.ExamplePath,
+	})
+	if err != nil {
+		log.Fatal(err.Error())
+	}
+
+	fmt.Println("Access granted")
+}
+
+==== ./cmd/other_service/main.go ====
+package main
+
+import (
+	"context"
+	"flag"
+	"fmt"
+	"log"
+	"math/rand"
+	"net"
+	"os"
+	"time"
+
+	"github.com/brianvoe/gofakeit"
+	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
+	"github.com/natefinch/lumberjack"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/reflection"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/beachrockhotel/auth/internal/logger"
+	"github.com/beachrockhotel/auth/internal/tracing"
+	desc "github.com/beachrockhotel/auth/pkg/other_auth_v1"
+)
+
+var logLevel = flag.String("l", "info", "log level")
+
+const (
+	grpcPort    = 50052
+	serviceName = "other-service"
+)
+
+type server struct {
+	desc.UnimplementedOtherAuthV1Server
+}
+
+// Get ...
+func (s *server) Get(ctx context.Context, req *desc.GetRequest) (*desc.GetResponse, error) {
+	// Можно раскомментировать, чтобы увидеть, как работает tracing с ошибками
+	// return nil, errors.Errorf("not implemented")
+
+	if req.GetId() == 0 {
+		return nil, errors.Errorf("id is empty")
+	}
+
+	// rand.Intn(max - min) + min
+	time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond)
+
+	return &desc.GetResponse{
+		Auth: &desc.Auth{
+			Id: req.GetId(),
+			Info: &desc.AuthInfo{
+				Title:   gofakeit.BeerName(),
+				Content: gofakeit.IPv4Address(),
+			},
+			CreatedAt: timestamppb.New(gofakeit.Date()),
+			UpdatedAt: timestamppb.New(gofakeit.Date()),
+		},
+	}, nil
+}
+
+func main() {
+	flag.Parse()
+
+	logger.Init(getCore(getAtomicLevel()))
+	tracing.Init(logger.Logger(), serviceName)
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	if err != nil {
+		log.Fatalf("failed to listen: %v", err)
+	}
+
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(otgrpc.OpenTracingServerInterceptor(opentracing.GlobalTracer())),
+	)
+	reflection.Register(s)
+	desc.RegisterOtherAuthV1Server(s, &server{})
+
+	log.Printf("server listening at %v", lis.Addr())
+
+	if err = s.Serve(lis); err != nil {
+		log.Fatalf("failed to serve: %v", err)
+	}
+}
+
+func getCore(level zap.AtomicLevel) zapcore.Core {
+	stdout := zapcore.AddSync(os.Stdout)
+
+	file := zapcore.AddSync(&lumberjack.Logger{
+		Filename:   "logs/app.log",
+		MaxSize:    10, // megabytes
+		MaxBackups: 3,
+		MaxAge:     7, // days
+	})
+
+	productionCfg := zap.NewProductionEncoderConfig()
+	productionCfg.TimeKey = "timestamp"
+	productionCfg.EncodeTime = zapcore.ISO8601TimeEncoder
+
+	developmentCfg := zap.NewDevelopmentEncoderConfig()
+	developmentCfg.EncodeLevel = zapcore.CapitalColorLevelEncoder
+
+	consoleEncoder := zapcore.NewConsoleEncoder(developmentCfg)
+	fileEncoder := zapcore.NewJSONEncoder(productionCfg)
+
+	return zapcore.NewTee(
+		zapcore.NewCore(consoleEncoder, stdout, level),
+		zapcore.NewCore(fileEncoder, file, level),
+	)
+}
+
+func getAtomicLevel() zap.AtomicLevel {
+	var level zapcore.Level
+	if err := level.Set(*logLevel); err != nil {
+		log.Fatalf("failed to set log level: %v", err)
+	}
+
+	return zap.NewAtomicLevelAt(level)
+}
+
+==== ./cmd/grpc_server/main.go ====
+package main
+
+import (
+	"context"
+	"github.com/beachrockhotel/auth/internal/logger"
+	"go.uber.org/zap/zapcore"
+	"log"
+
+	"github.com/beachrockhotel/auth/internal/app"
+)
+
+func main() {
+	logger.InitDefault(zapcore.InfoLevel)
+	ctx := context.Background()
+
+	a, err := app.NewApp(ctx)
+	if err != nil {
+		log.Fatalf("failed to init app: %s", err.Error())
+	}
+
+	err = a.Run()
+	if err != nil {
+		log.Fatalf("failed to run app: %s", err.Error())
+	}
+}
+
+==== ./docker-compose.yaml ====
+version: '3'
+
+volumes:
+  postgres_volume:
+  prometheus_data:
+  grafana_data:
+
+services:
+  pg-local:
+    image: postgres:14-alpine3.17
+    env_file:
+      - .env
+    ports:
+      - "54321:5432"
+    volumes:
+      - postgres_volume:/var/lib/postgresql/data
+
+  prometheus:
+    image: prom/prometheus:v2.37.9
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./alerts.yml:/etc/prometheus/alerts.yml
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana-oss:10.0.3
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.48
+    ports:
+      - "5775:5775/udp"
+      - "6831:6831/udp" # jaeger-client
+      - "6832:6832/udp"
+      - "5778:5778"
+      - "16686:16686" # web
+      - "14268:14268"
+      - "9411:9411"
